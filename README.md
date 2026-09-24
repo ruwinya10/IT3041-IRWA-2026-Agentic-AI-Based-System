@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # AI Study & Research Assistant
 
 A student-facing multi-agent system for the IT3041 Agentic AI assignment. It combines an LLM, NLP, information retrieval, security, HTTP/JSON agent communication, source verification, and responsible-AI controls.
@@ -153,3 +154,6 @@ For the final report, document your own test results, limitations, pricing assum
 - Add rate limiting and stricter file scanning before production deployment.
 - Add a second academic source such as Crossref or Semantic Scholar.
 - Add a formal evaluation set with answer-support, retrieval precision, latency and user-satisfaction metrics.
+=======
+# IT3041-IRWA-2026-Agentic-AI-Based-System
+>>>>>>> 5e85c0f9ac13a8e66b55ddeb3d1dadc26174e710

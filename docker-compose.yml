@@ -1,0 +1,32 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: study-assistant-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: study_assistant
+      MYSQL_USER: study_user
+      MYSQL_PASSWORD: study_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "study_user", "-pstudy_password"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: study-assistant-chroma
+    restart: unless-stopped
+    ports:
+      - "8004:8000"
+    volumes:
+      - ./chroma_data:/data
+
+volumes:
+  mysql_data:

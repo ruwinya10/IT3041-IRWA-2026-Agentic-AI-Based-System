@@ -181,6 +181,47 @@ def classify_intent(question: str) -> IntentResult:
     Ask the LLM to determine the user's academic intent.
     """
 
+    q = question.lower()
+
+    document_words = [
+        "uploaded file",
+        "uploaded document",
+        "uploaded pdf",
+        "uploaded material",
+        "this file",
+        "this document",
+        "this pdf",
+        "pdf",
+        "document",
+        "lecture",
+        "slides"
+    ]
+
+    summary_words = [
+        "summarize",
+        "summarise",
+        "summary",
+        "main points",
+        "key points",
+        "overview"
+    ]
+
+    if any(word in q for word in summary_words) and not any(
+        word in q for word in ["research paper", "research papers", "find papers", "external research"]
+    ):
+        return IntentResult(
+            academic=True,
+            intent="SUMMARIZATION",
+            route=["study", "verification"]
+        )
+
+    if any(word in q for word in document_words):
+        return IntentResult(
+            academic=True,
+            intent="DOCUMENT_QA",
+            route=["study", "verification"]
+        )
+
     prompt = f"""
 You are the intent-classification component of an AI Study and Research Assistant.
 

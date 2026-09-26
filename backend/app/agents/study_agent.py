@@ -162,6 +162,22 @@ If uploaded or research material is available, use it as supporting
 evidence.
 """
 
+    elif req.intent == "GENERAL_KNOWLEDGE":
+
+        task_instruction = """
+Answer this general-knowledge question directly and accurately.
+
+This is a factual student question (for example geography, history,
+civics, or a well-known science fact). It does not require academic
+papers or uploaded documents.
+
+Give a clear, concise answer first, then a short supporting explanation
+when useful.
+
+Do not invent citations, research papers, or document evidence.
+Do not refuse the question for being non-academic.
+"""
+
     else:
 
         task_instruction = """
@@ -174,7 +190,23 @@ Give an accurate educational explanation appropriate for a student.
     # STEP 6 — Build final LLM prompt
     # ---------------------------------------------------------
 
-    prompt = f"""
+    if req.intent == "GENERAL_KNOWLEDGE":
+        prompt = f"""
+Student question:
+
+{req.question}
+
+Task instructions:
+
+{task_instruction}
+
+Answer using general knowledge. Uploaded documents and academic
+papers are not required for this question.
+
+At the end, provide a short "Key points" section when appropriate.
+"""
+    else:
+        prompt = f"""
 Student question:
 
 {req.question}
@@ -209,10 +241,21 @@ At the end, provide a short "Key points" section when appropriate.
     # STEP 7 — Generate answer
     # ---------------------------------------------------------
 
-    answer = chat(
+    system_message = (
         "You are the Study/NLP Agent of an academic AI assistant. "
         "Your role is to explain, summarize, answer document questions, "
-        "generate quizzes, and synthesize academic research accurately.",
+        "generate quizzes, synthesize academic research accurately, "
+        "and answer student general-knowledge questions clearly."
+    )
+
+    if req.intent == "GENERAL_KNOWLEDGE":
+        system_message = (
+            "You are a helpful study assistant. Answer general-knowledge "
+            "questions directly and accurately for students."
+        )
+
+    answer = chat(
+        system_message,
         prompt
     )
 

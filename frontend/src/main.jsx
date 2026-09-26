@@ -288,6 +288,10 @@ function App() {
     setStatus('');
   }
 
+  const hasGeneratedAnswer = messages.some(
+    (message) => message.role === 'assistant' && !message.loading && Boolean(message.content)
+  );
+
   function renderComposer(isCompact = false) {
     return (
       <section className={`composer-panel ${isCompact ? 'compact' : ''}`}>
@@ -551,6 +555,12 @@ function App() {
                 </article>
               ))}
             </section>
+
+            {hasGeneratedAnswer && (
+              <p className="ai-disclaimer">
+                AI can make mistakes. Please verify important information using reliable sources.
+              </p>
+            )}
 
             {renderComposer(true)}
           </section>

@@ -306,6 +306,18 @@ textarea:focus {
   font-size: 0.86rem;
 }
 
+.ai-disclaimer {
+  margin: 16px auto 10px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.chat-view .ai-disclaimer + .composer-panel.compact {
+  margin-top: 0;
+}
+
 .attachment-card {
   width: min(320px, 100%);
   min-height: 82px;

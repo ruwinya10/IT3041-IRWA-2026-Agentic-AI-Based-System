@@ -10,7 +10,7 @@ const QUICK_TOPICS = [
   { icon: '📄', label: 'Summarize PDF', prompt: 'Summarize my uploaded PDF' },
   { icon: '🔎', label: 'Find papers', prompt: 'Find research papers about this topic' },
   { icon: '💡', label: 'Explain concept', prompt: 'Explain this concept with examples' },
-  { icon: '⚖️', label: 'Compare theories', prompt: 'Compare these theories clearly' },
+  { icon: '❓', label: 'Generate quiz', prompt: 'Generate a quiz with practice questions about this topic' },
   { icon: '🧠', label: 'Study notes', prompt: 'Turn this into study notes' },
   { icon: '✅', label: 'Verify answer', prompt: 'Verify this answer with evidence' },
 ];

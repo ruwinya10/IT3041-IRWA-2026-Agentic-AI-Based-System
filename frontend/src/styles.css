@@ -67,6 +67,19 @@ button:disabled {
   background: rgba(255, 255, 255, 0.72);
 }
 
+.auth-panel .brand-logo {
+  display: block;
+  margin: 0 auto;
+  width: 80px;
+  height: 80px;
+}
+
+.auth-panel .eyebrow,
+.auth-panel h1,
+.auth-panel .auth-copy {
+  text-align: center;
+}
+
 .eyebrow,
 .welcome {
   margin: 16px 0 8px;

@@ -26,6 +26,7 @@ def fallback_result(confidence: str, issue: str, correction: str = ""):
     return {
         "supported": False,
         "confidence": confidence,
+        "summary": issue,
         "issues": [issue],
         "corrections": corrections,
         "evidence_count": 0,
@@ -55,6 +56,7 @@ def normalize_result(data: dict[str, Any], evidence_count: int):
     issues = data.get("issues", [])
     corrections = data.get("corrections", [])
     checked_claims = data.get("checked_claims", [])
+    summary = str(data.get("summary", "")).strip()
 
     if not isinstance(issues, list):
         issues = [str(issues)]
@@ -70,9 +72,18 @@ def normalize_result(data: dict[str, Any], evidence_count: int):
     else:
         verdict = "Needs more evidence"
 
+    if not summary:
+        if supported:
+            summary = "The answer is materially supported by the retrieved evidence."
+        elif issues:
+            summary = str(issues[0])
+        else:
+            summary = "The retrieved evidence is not enough to fully verify the answer."
+
     return {
         "supported": supported,
         "confidence": confidence,
+        "summary": summary,
         "issues": [str(item) for item in issues],
         "corrections": [str(item) for item in corrections],
         "evidence_count": evidence_count,
@@ -138,6 +149,7 @@ def verify(req: VerifyRequest):
         return {
             "supported": False,
             "confidence": "low",
+            "summary": "No retrieved evidence was provided, so the answer cannot be treated as verified.",
             "issues": [
                 "No retrieved evidence was provided to verify the answer."
             ],
@@ -170,6 +182,7 @@ Return ONLY valid JSON using exactly this shape:
 {{
   "supported": false,
   "confidence": "high | medium | low",
+  "summary": "one short sentence explaining the verification result",
   "issues": ["issue 1"],
   "corrections": ["correction 1"],
   "checked_claims": [

@@ -15,6 +15,31 @@ const QUICK_TOPICS = [
   { icon: '✅', label: 'Verify answer', prompt: 'Verify this answer with evidence' },
 ];
 
+function verificationScore(verification) {
+  if (!verification) return null;
+  if (verification.supported) return 90;
+  if (verification.confidence === 'high') return 80;
+  if (verification.confidence === 'medium') return 60;
+  if (verification.confidence === 'low') return 35;
+  return 20;
+}
+
+function verificationLabel(verification) {
+  if (!verification) return 'Not checked';
+  if (verification.verdict) return verification.verdict;
+  if (verification.supported) return 'Supported';
+  if (verification.confidence === 'medium') return 'Partially supported';
+  return 'Needs more evidence';
+}
+
+function verificationSummary(verification) {
+  if (!verification) return '';
+  if (verification.summary) return verification.summary;
+  if (verification.issues?.length) return verification.issues[0];
+  if (verification.supported) return 'The answer is supported by the evidence checked.';
+  return 'More supporting evidence is needed before this answer can be treated as verified.';
+}
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [mode, setMode] = useState('login');
@@ -159,14 +184,19 @@ function App() {
 
       setStatus('Coordinator is choosing the best agent route...');
 
-      const r = await fetch(API + '/api/chat/ask', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + token,
-        },
-        body: JSON.stringify({ question: apiQuestion }),
-      });
+      let r;
+      try {
+        r = await fetch(API + '/api/chat/ask', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + token,
+          },
+          body: JSON.stringify({ question: apiQuestion }),
+        });
+      } catch (error) {
+        throw new Error('Could not contact the chat API. Check that backend and all agents are running.');
+      }
 
       const d = await r.json();
 
@@ -455,6 +485,47 @@ function App() {
                         <div className="answer">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
                         </div>
+
+                        {message.verification && (
+                          <div className="verification-card">
+                            <div>
+                              <span>Verification</span>
+                              <strong>{verificationLabel(message.verification)}</strong>
+                            </div>
+                            <div className="verification-score">
+                              {verificationScore(message.verification)}%
+                            </div>
+                            <p>
+                              Confidence: <b>{message.verification.confidence || 'unknown'}</b>
+                              {typeof message.verification.evidence_count === 'number'
+                                ? ` • Evidence checked: ${message.verification.evidence_count}`
+                                : ''}
+                            </p>
+                            <div className="verification-details">
+                              <p>{verificationSummary(message.verification)}</p>
+                              {message.verification.issues?.length ? (
+                                <div>
+                                  <span>Areas to improve</span>
+                                  <ul>
+                                    {message.verification.issues.slice(0, 3).map((issue, index) => (
+                                      <li key={`${issue}-${index}`}>{issue}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+                              {message.verification.corrections?.length ? (
+                                <div>
+                                  <span>Suggested fixes</span>
+                                  <ul>
+                                    {message.verification.corrections.slice(0, 3).map((correction, index) => (
+                                      <li key={`${correction}-${index}`}>{correction}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        )}
 
                         {message.sources?.length ? (
                           <details className="evidence-drawer">

@@ -21,6 +21,7 @@ class IntentResult(BaseModel):
     academic: bool
     intent: Literal[
         "GENERAL_LEARNING",
+        "GENERAL_KNOWLEDGE",
         "EXPLANATION",
         "SUMMARIZATION",
         "DOCUMENT_QA",
@@ -54,6 +55,61 @@ def parse_intent(raw: str) -> IntentResult:
     data = json.loads(json_text)
 
     return IntentResult.model_validate(data)
+
+
+def looks_like_general_knowledge(question: str) -> bool:
+    """
+    Conservative check for student-style factual questions
+    such as capitals, geography, and well-known facts.
+    """
+
+    q = question.lower()
+
+    unrelated = [
+        "weather",
+        "forecast",
+        "stock price",
+        "buy ",
+        "dating",
+        "girlfriend",
+        "boyfriend",
+        "recipe",
+        "how are you",
+        "tell me a joke",
+        "sports score",
+        "lottery",
+    ]
+
+    if any(word in q for word in unrelated):
+        return False
+
+    gk_phrases = [
+        "capital of",
+        "capital city",
+        "currency of",
+        "official language",
+        "population of",
+        "largest city",
+        "largest country",
+        "smallest country",
+        "which country",
+        "which city",
+        "which planet",
+        "who invented",
+        "who discovered",
+        "who is the president",
+        "who is the prime minister",
+        "who was the first",
+        "where is",
+        "located in",
+        "national animal",
+        "national bird",
+        "how many continents",
+        "how many planets",
+        "how many countries",
+    ]
+
+    return any(phrase in q for phrase in gk_phrases)
 
 
 def fallback_intent(question: str) -> IntentResult:
@@ -160,6 +216,13 @@ def fallback_intent(question: str) -> IntentResult:
         "data science"
     ]
 
+    if looks_like_general_knowledge(question):
+        return IntentResult(
+            academic=False,
+            intent="GENERAL_KNOWLEDGE",
+            route=["study"]
+        )
+
     if any(word in q for word in academic_words):
         return IntentResult(
             academic=True,
@@ -233,6 +296,13 @@ GENERAL_LEARNING
 - General academic learning questions.
 - Example: "What is machine learning?"
 
+GENERAL_KNOWLEDGE
+- Factual general-knowledge questions a student might ask, such as
+  geography, capitals, history facts, civics, or well-known science facts.
+- These are NOT research requests and do NOT need academic papers.
+- Example: "What is the capital of France?"
+- Example: "Who invented the telephone?"
+
 EXPLANATION
 - The student wants a concept explained clearly.
 - Example: "Explain overfitting with an example."
@@ -259,7 +329,11 @@ RESEARCH_ANALYSIS
 
 OUT_OF_SCOPE
 - The question is unrelated to education, academic learning, studying,
-  research, or the uploaded academic material.
+  research, uploaded academic material, AND is also not a factual
+  general-knowledge question a student might reasonably ask.
+- Example: "What is the weather today?"
+- Do NOT use OUT_OF_SCOPE for capitals, countries, famous historical
+  facts, or similar school-style general knowledge.
 
 Important routing rules:
 
@@ -267,30 +341,37 @@ Important routing rules:
    the Research Agent unless the student explicitly asks for external
    research papers as well.
 
-2. "What is machine learning?" should go to Study/NLP.
+2. "What is machine learning?" should go to Study/NLP as GENERAL_LEARNING
+   or EXPLANATION. Do not change academic routing for course topics.
 
-3. "Explain overfitting" should go to Study/NLP.
+3. "What is the capital of France?" should go to Study/NLP as
+   GENERAL_KNOWLEDGE. It is in scope.
 
-4. "Summarize this uploaded PDF" should go to Study/NLP.
+4. "Explain overfitting" should go to Study/NLP.
 
-5. "What does the uploaded document say about clustering?" should go
+5. "Summarize this uploaded PDF" should go to Study/NLP.
+
+6. "What does the uploaded document say about clustering?" should go
    to Study/NLP.
 
-6. "Generate 10 MCQs about data mining" should go to Study/NLP.
+7. "Generate 10 MCQs about data mining" should go to Study/NLP.
 
-7. "Find recent research papers about machine learning" should go to
+8. "Find recent research papers about machine learning" should go to
    Research → Study → Verification.
 
-8. "Find research papers about gradient clipping and compare their
+9. "Find research papers about gradient clipping and compare their
    findings" should go to Research → Study → Verification.
 
-9. An unrelated question such as "What is the weather today?" should
-   be OUT_OF_SCOPE.
+10. An unrelated question such as "What is the weather today?" should
+    be OUT_OF_SCOPE.
 
 Routing values must follow these rules:
 
 GENERAL_LEARNING:
 ["study", "verification"]
+
+GENERAL_KNOWLEDGE:
+["study"]
 
 EXPLANATION:
 ["study", "verification"]
@@ -335,7 +416,27 @@ Student question:
             temperature=0
         )
 
-        return parse_intent(raw)
+        result = parse_intent(raw)
+
+        academic_only_intents = {
+            "SUMMARIZATION",
+            "DOCUMENT_QA",
+            "QUIZ_GENERATION",
+            "RESEARCH",
+            "RESEARCH_ANALYSIS",
+        }
+
+        if result.intent == "GENERAL_KNOWLEDGE" or (
+            looks_like_general_knowledge(question)
+            and result.intent not in academic_only_intents
+        ):
+            return IntentResult(
+                academic=False,
+                intent="GENERAL_KNOWLEDGE",
+                route=["study"]
+            )
+
+        return result
 
     except Exception:
         return fallback_intent(question)
@@ -369,13 +470,19 @@ async def ask(req: AskRequest):
     # STEP 2 — Handle out-of-scope questions immediately
     # ---------------------------------------------------------
 
-    if not intent_result.academic:
+    if (
+        intent_result.intent == "OUT_OF_SCOPE"
+        or (
+            not intent_result.academic
+            and intent_result.intent != "GENERAL_KNOWLEDGE"
+        )
+    ):
         return {
             "answer": (
                 "I'm designed to help with academic learning, "
                 "research, uploaded study materials, explanations, "
-                "summaries, and quizzes. "
-                "Please ask an academic or study-related question."
+                "summaries, quizzes, and general-knowledge questions. "
+                "Please ask an academic, study-related, or general-knowledge question."
             ),
             "sources": [],
             "verification": None,

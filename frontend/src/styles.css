@@ -654,6 +654,30 @@ pre {
   font-size: 0.92rem;
 }
 
+.verification-details {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+  color: var(--text);
+}
+
+.verification-details p {
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.verification-details ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.verification-details li {
+  margin-top: 4px;
+  color: var(--text);
+  line-height: 1.45;
+}
+
 .evidence-drawer {
   margin-top: 16px;
   padding-top: 14px;

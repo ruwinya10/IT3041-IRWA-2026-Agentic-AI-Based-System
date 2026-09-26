@@ -32,6 +32,14 @@ function verificationLabel(verification) {
   return 'Needs more evidence';
 }
 
+function verificationSummary(verification) {
+  if (!verification) return '';
+  if (verification.summary) return verification.summary;
+  if (verification.issues?.length) return verification.issues[0];
+  if (verification.supported) return 'The answer is supported by the evidence checked.';
+  return 'More supporting evidence is needed before this answer can be treated as verified.';
+}
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [mode, setMode] = useState('login');
@@ -493,6 +501,29 @@ function App() {
                                 ? ` • Evidence checked: ${message.verification.evidence_count}`
                                 : ''}
                             </p>
+                            <div className="verification-details">
+                              <p>{verificationSummary(message.verification)}</p>
+                              {message.verification.issues?.length ? (
+                                <div>
+                                  <span>Areas to improve</span>
+                                  <ul>
+                                    {message.verification.issues.slice(0, 3).map((issue, index) => (
+                                      <li key={`${issue}-${index}`}>{issue}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+                              {message.verification.corrections?.length ? (
+                                <div>
+                                  <span>Suggested fixes</span>
+                                  <ul>
+                                    {message.verification.corrections.slice(0, 3).map((correction, index) => (
+                                      <li key={`${correction}-${index}`}>{correction}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
                         )}
 

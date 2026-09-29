@@ -48,19 +48,43 @@ function InteractiveQuiz({ questions }) {
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [showResult, setShowResult] = useState(false);
 
-  if (!questions || !questions.length) return <p>No questions generated.</p>;
+  const qList = Array.isArray(questions)
+    ? questions
+    : Array.isArray(questions?.questions)
+    ? questions.questions
+    : [];
+
+  if (!qList || !qList.length) {
+    return <p className="muted" style={{ padding: '12px' }}>No quiz questions could be generated. Try with a clearer topic or text snippet.</p>;
+  }
+
+  function cleanString(str) {
+    return String(str || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^[a-d]\s*[:.)-]\s*/, '')
+      .replace(/\.$/, '')
+      .trim();
+  }
+
+  function isMatch(opt, ans) {
+    if (!opt || !ans) return false;
+    const o = cleanString(opt);
+    const a = cleanString(ans);
+    return o === a || o.includes(a) || a.includes(o);
+  }
 
   if (showResult) {
     let score = 0;
-    questions.forEach((q, idx) => {
-      if (selectedAnswers[idx] === q.correct_answer) score++;
+    qList.forEach((q, idx) => {
+      if (isMatch(selectedAnswers[idx], q.correct_answer)) score++;
     });
-    const pct = Math.round((score / questions.length) * 100);
+    const pct = Math.round((score / qList.length) * 100);
     return (
       <div className="quiz-summary-card">
         <div className="study-badge">Quiz Results</div>
         <div className="quiz-summary-score">{pct}%</div>
-        <p>You scored <strong>{score}</strong> out of <strong>{questions.length}</strong> ({pct}% correct).</p>
+        <p>You scored <strong>{score}</strong> out of <strong>{qList.length}</strong> ({pct}% correct).</p>
         <button
           type="button"
           className="primary-button"
@@ -77,14 +101,17 @@ function InteractiveQuiz({ questions }) {
     );
   }
 
-  const currentQ = questions[currentIndex];
+  const currentQ = qList[currentIndex];
+  if (!currentQ) return null;
+
   const userAnswer = selectedAnswers[currentIndex];
   const isAnswered = userAnswer !== undefined;
+  const isUserCorrect = isAnswered && isMatch(userAnswer, currentQ.correct_answer);
 
   return (
     <div className="quiz-container">
       <div className="quiz-header">
-        <span>Question {currentIndex + 1} of {questions.length}</span>
+        <span>Question {currentIndex + 1} of {qList.length}</span>
         <span className="study-badge">Interactive MCQ Quiz</span>
       </div>
       <div className="quiz-question">{currentQ.question}</div>
@@ -92,7 +119,7 @@ function InteractiveQuiz({ questions }) {
         {currentQ.options?.map((opt, i) => {
           let btnClass = 'quiz-opt-btn';
           if (isAnswered) {
-            if (opt === currentQ.correct_answer) btnClass += ' correct';
+            if (isMatch(opt, currentQ.correct_answer)) btnClass += ' correct';
             else if (opt === userAnswer) btnClass += ' wrong';
           }
           return (
@@ -110,8 +137,8 @@ function InteractiveQuiz({ questions }) {
       </div>
 
       {isAnswered && (
-        <div className={`quiz-explanation-box ${userAnswer === currentQ.correct_answer ? 'correct' : 'wrong'}`}>
-          <strong>{userAnswer === currentQ.correct_answer ? '✓ Correct!' : '✗ Incorrect.'}</strong>{' '}
+        <div className={`quiz-explanation-box ${isUserCorrect ? 'correct' : 'wrong'}`}>
+          <strong>{isUserCorrect ? '✓ Correct!' : '✗ Incorrect.'}</strong>{' '}
           {currentQ.explanation}
         </div>
       )}
@@ -122,14 +149,14 @@ function InteractiveQuiz({ questions }) {
             type="button"
             className="primary-button"
             onClick={() => {
-              if (currentIndex < questions.length - 1) {
+              if (currentIndex < qList.length - 1) {
                 setCurrentIndex(currentIndex + 1);
               } else {
                 setShowResult(true);
               }
             }}
           >
-            {currentIndex < questions.length - 1 ? 'Next Question →' : 'View Final Score'}
+            {currentIndex < qList.length - 1 ? 'Next Question →' : 'View Final Score'}
           </button>
         </div>
       )}
@@ -351,7 +378,7 @@ function App() {
     return d;
   }
 
-  async function executeStudyAction(task, contentToProcess, customOptions = {}) {
+  async function executeStudyAction(task, contentToProcess, customOptions = {}, uploadedFile = null) {
     const text = (contentToProcess || '').trim();
     if (!text || isAsking) return;
 
@@ -369,6 +396,7 @@ function App() {
       id: crypto.randomUUID(),
       role: 'user',
       content: `${taskLabels[task] || task}: "${text.length > 70 ? text.substring(0, 70) + '...' : text}"`,
+      attachedFileName: uploadedFile ? uploadedFile.filename : '',
     };
     const pendingMessage = { id: crypto.randomUUID(), role: 'assistant', loading: true };
 
@@ -427,6 +455,7 @@ function App() {
                 studyData: d.data,
                 options: mergedOptions,
                 route: 'Study/NLP Agent',
+                uploadedFile,
               }
             : msg
         )
@@ -449,21 +478,48 @@ function App() {
 
   async function ask() {
     const submittedQuestion = question.trim();
-    if (!submittedQuestion || isAsking) return;
+    if ((!submittedQuestion && !file) || isAsking) return;
+
+    let textToSend = submittedQuestion;
+    let uploadedFile = null;
+
+    if (file) {
+      setIsAsking(true);
+      setStatus('Uploading and indexing PDF...');
+      try {
+        uploadedFile = await uploadSelectedFile();
+        if (!textToSend) {
+          textToSend = selectedTool === 'summarize'
+            ? `Summarize the uploaded PDF document: ${uploadedFile.filename}`
+            : selectedTool === 'quiz'
+            ? `Generate a practice quiz from the uploaded PDF document: ${uploadedFile.filename}`
+            : selectedTool === 'ner'
+            ? `Extract named entities from the uploaded PDF document: ${uploadedFile.filename}`
+            : `Analyze the uploaded PDF: ${uploadedFile.filename}`;
+        } else {
+          textToSend = `${textToSend}\n\n[Uploaded Document Context: ${uploadedFile.filename}]`;
+        }
+      } catch (err) {
+        setIsAsking(false);
+        setStatus(err.message || 'PDF upload failed.');
+        return;
+      }
+      setIsAsking(false);
+    }
 
     // If a study tool is selected, route directly via Study/NLP Agent
     if (selectedTool !== 'chat') {
       const toolToRun = selectedTool;
       setQuestion('');
-      executeStudyAction(toolToRun, submittedQuestion);
+      executeStudyAction(toolToRun, textToSend, {}, uploadedFile);
       return;
     }
 
-    const attachedFileName = file?.name || '';
+    const attachedFileName = uploadedFile?.filename || file?.name || '';
     const userMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: submittedQuestion,
+      content: textToSend,
       attachedFileName,
     };
     const pendingMessage = { id: crypto.randomUUID(), role: 'assistant', loading: true };
@@ -471,14 +527,12 @@ function App() {
     setMessages((current) => [...current, userMessage, pendingMessage]);
     setQuestion('');
     setIsAsking(true);
-    setStatus(file ? 'Uploading PDF, then asking ResearchMind...' : 'Coordinator is choosing the best agent route...');
+    setStatus('Coordinator is choosing the best agent route...');
 
     try {
-      let uploadedFile = null;
-      let apiQuestion = submittedQuestion;
-      if (file) {
-        uploadedFile = await uploadSelectedFile();
-        apiQuestion = `${submittedQuestion}\n\nUse the uploaded PDF/document as the source. Uploaded file: ${uploadedFile.filename}.`;
+      let apiQuestion = textToSend;
+      if (uploadedFile) {
+        apiQuestion = `${textToSend}\n\nUse the uploaded PDF/document as the source. Uploaded file: ${uploadedFile.filename}.`;
       }
 
       setStatus('Coordinator is choosing the best agent route...');
@@ -995,13 +1049,28 @@ function App() {
                               {message.studyTask === 'summarize' && (
                                 <div>
                                   <div className="study-badge">Smart Summary ({message.options?.mode || 'Summary'})</div>
-                                  <p style={{ lineHeight: 1.6, fontSize: '0.96rem' }}>{message.studyData.summary}</p>
+                                  <div style={{ lineHeight: 1.7, fontSize: '0.96rem', marginTop: '6px' }}>
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.studyData.summary}</ReactMarkdown>
+                                  </div>
                                   {message.studyData.bullet_points?.length > 0 && (
-                                    <ul style={{ marginTop: '10px' }}>
-                                      {message.studyData.bullet_points.map((pt, i) => (
-                                        <li key={i}>{pt}</li>
-                                      ))}
-                                    </ul>
+                                    <div style={{ marginTop: '12px' }}>
+                                      <strong>Key Takeaways:</strong>
+                                      <ul style={{ marginTop: '6px' }}>
+                                        {message.studyData.bullet_points.map((pt, i) => (
+                                          <li key={i}>{pt}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  {message.studyData.extractive_summary && (
+                                    <details className="evidence-drawer" style={{ marginTop: '12px' }}>
+                                      <summary style={{ cursor: 'pointer', color: 'var(--teal)', fontWeight: 700 }}>
+                                        Classical NLP Extractive Summary (TF-IDF)
+                                      </summary>
+                                      <p style={{ marginTop: '8px', fontSize: '0.9rem', color: 'var(--text)', fontStyle: 'italic', lineHeight: 1.5 }}>
+                                        {message.studyData.extractive_summary}
+                                      </p>
+                                    </details>
                                   )}
                                 </div>
                               )}
@@ -1036,6 +1105,9 @@ function App() {
                               {message.studyTask === 'ner' && (
                                 <div className="ner-group">
                                   <div className="study-badge">Named Entity Recognition (spaCy NLP)</div>
+                                  <p style={{ margin: '4px 0 10px', fontSize: '0.86rem', color: 'var(--muted)' }}>
+                                    Extracted <strong>{message.studyData.entities?.length || 0}</strong> entities using spaCy pipeline + academic technology extraction:
+                                  </p>
                                   <div className="ner-badges-container">
                                     {message.studyData.entities?.map((ent, i) => {
                                       const lbl = (ent.label || '').toLowerCase();
@@ -1044,7 +1116,7 @@ function App() {
                                       else if (lbl.includes('org')) typeClass = 'organization';
                                       else if (lbl.includes('loc') || lbl.includes('gpe')) typeClass = 'location';
                                       else if (lbl.includes('date')) typeClass = 'date';
-                                      else if (lbl.includes('product') || lbl.includes('tech')) typeClass = 'technology';
+                                      else if (lbl.includes('tech') || lbl.includes('product')) typeClass = 'technology';
 
                                       return (
                                         <span key={i} className={`ner-chip ${typeClass}`}>
@@ -1055,7 +1127,7 @@ function App() {
                                     })}
                                   </div>
                                   {(!message.studyData.entities || !message.studyData.entities.length) && (
-                                    <p className="muted">No specific named entities detected in the text.</p>
+                                    <p className="muted" style={{ marginTop: '8px' }}>No named entities detected. Try pasting a paragraph containing names, organizations, dates, or technologies.</p>
                                   )}
                                 </div>
                               )}

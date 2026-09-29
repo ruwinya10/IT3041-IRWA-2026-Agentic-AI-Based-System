@@ -17,12 +17,16 @@ class StudyTaskRequest(BaseModel):
 @router.post("/process")
 async def process_task(data: StudyTaskRequest, credentials: HTTPAuthorizationCredentials = Depends(bearer)):
     user_id = get_current_user_id(credentials)
+    payload = data.model_dump()
+    if not payload.get("context"):
+        payload["context"] = {}
+    payload["context"]["user_id"] = user_id
     
     async with httpx.AsyncClient(timeout=90) as client:
         try:
             r = await client.post(
                 f"{settings.study_agent_url}/process", 
-                json=data.model_dump()
+                json=payload
             )
             r.raise_for_status()
             return r.json()

@@ -21,6 +21,7 @@ from app.research.diversification import (
     diversify_ranked_papers,
 )
 from app.research.selection_explanations import (
+    build_ranking_explanation,
     build_selection_explanation,
 )
 
@@ -1729,6 +1730,26 @@ def score_paper_relevance(
         "matched_phrases"
     ] = matched_phrases
 
+    # Preserve the exact matching evidence used above; no full-text inference.
+    paper["evidence_basis"] = {
+        "title": {
+            "available": bool(title.strip()) and title != "Untitled",
+            "matched_keywords": list(title_keyword_data["matches"]),
+            "matched_phrases": list(title_phrase_data["matches"]),
+        },
+        "abstract": {
+            "available": bool(abstract.strip()),
+            "matched_keywords": list(abstract_keyword_data["matches"]),
+            "matched_phrases": list(abstract_phrase_data["matches"]),
+        },
+        "full_text_reviewed": False,
+    }
+    paper["evidence_limitations"] = [
+        "Only retrieved title/abstract metadata was assessed; full-paper findings were not verified."
+        if abstract.strip() else
+        "No abstract is available; only title/metadata evidence was assessed, so detailed findings cannot be verified."
+    ]
+
     paper[
         "ranking_signals"
     ] = {
@@ -1797,6 +1818,7 @@ def rank_papers(
         meaningful_keywords = set(keywords) - STOP_WORDS
         matched = set(scored_paper["matched_keywords"]) & meaningful_keywords
         coverage = len(matched) / len(meaningful_keywords) if meaningful_keywords else 0.0
+        scored_paper["keyword_coverage"] = coverage
         compound_match = any(
             len(set(phrase.split()) & meaningful_keywords) >= 2
             for phrase in scored_paper["matched_phrases"]
@@ -2157,6 +2179,7 @@ async def research(
     # ========================================================
 
     for paper in ranked_papers:
+        paper["ranking_explanation"] = build_ranking_explanation(paper)
         paper["selection_explanation"] = (
             build_selection_explanation(
                 paper

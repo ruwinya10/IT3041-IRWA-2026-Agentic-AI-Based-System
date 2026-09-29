@@ -14,7 +14,28 @@ def build_selection_explanation(
 
     reasons: List[str] = []
 
+    evidence = paper.get("evidence_basis")
+    if evidence:
+        for field in ("title", "abstract"):
+            field_evidence = evidence.get(field) or {}
+            phrases = field_evidence.get("matched_phrases") or []
+            keywords = field_evidence.get("matched_keywords") or []
+            if phrases:
+                reasons.append(f"the {field} matches query phrases: {', '.join(phrases)}")
+            if keywords:
+                reasons.append(
+                    f"the {field} contains {len(keywords)} query keywords: {', '.join(keywords)}"
+                )
+        explanation = (
+            "Selected because " + "; ".join(reasons) + "."
+            if reasons else "No title/abstract query matches are recorded."
+        )
+        limitations = paper.get("evidence_limitations") or []
+        return " ".join([explanation, *limitations])
+
     matched_phrases = paper.get(
+        "matched_phrases"
+    ) or paper.get(
         "matched_topic_phrases"
     ) or []
 
@@ -118,4 +139,29 @@ def build_selection_explanation(
         "Selected because it "
         + "; ".join(reasons)
         + "."
+    )
+
+
+def build_ranking_explanation(paper: Dict[str, Any]) -> str:
+    """Describe the existing sort keys and gate, without rescoring a paper."""
+    signals = paper.get("ranking_signals") or {}
+    topical = sum(signals.get(key, 0.0) for key in (
+        "title_keyword", "title_phrase", "abstract_keyword", "abstract_phrase"
+    ))
+    return (
+        f"Topical evidence is primary ({topical:.2f} points): "
+        f"title keywords {signals.get('title_keyword', 0.0):.2f}, "
+        f"title phrases {signals.get('title_phrase', 0.0):.2f}, "
+        f"abstract keywords {signals.get('abstract_keyword', 0.0):.2f}, "
+        f"abstract phrases {signals.get('abstract_phrase', 0.0):.2f}. "
+        f"Meaningful keyword coverage is {paper.get('keyword_coverage', 0.0):.1%}. "
+        "The relevance gate requires 75% coverage, or 50% with a compound phrase match. "
+        f"Secondary score contributions: search matches {signals.get('query_match', 0.0):.2f}, "
+        f"citations {signals.get('citation', 0.0):.2f}, "
+        f"open access {signals.get('open_access', 0.0):.2f}, "
+        f"PDF {signals.get('pdf_available', 0.0):.2f}. "
+        "These bonuses cannot bypass the gate. Ties in topical points use the combined "
+        "relevance score, then matched-query count, then citation count. "
+        "Final selection also applies title diversification; display rank need not "
+        "follow the combined relevance score."
     )

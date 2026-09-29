@@ -245,9 +245,8 @@ function App() {
   const [file, setFile] = useState(null);
   const [status, setStatus] = useState('');
   const [isAsking, setIsAsking] = useState(false);
-  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const messagesEndRef = useRef(null);
-  const latestAssistantRef = useRef(null);
 
   // Study tool modes inside the composer
   const [selectedTool, setSelectedTool] = useState('chat'); // 'chat' | 'explain' | 'summarize' | 'quiz' | 'flashcards' | 'notes' | 'keywords' | 'ner'
@@ -256,32 +255,25 @@ function App() {
   const [quizCount, setQuizCount] = useState(5);
   const [quizDifficulty, setQuizDifficulty] = useState('Medium');
 
-  function scrollToBottom(behavior = 'smooth') {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' });
-    } else {
-      window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
-    }
+  function scrollToTop(behavior = 'smooth') {
+    window.scrollTo({ top: 0, behavior });
   }
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage && lastMessage.role === 'assistant') {
-      latestAssistantRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [messages]);
 
   useEffect(() => {
     function handleScroll() {
       if (messages.length === 0) {
-        setShowScrollBottom(false);
+        setShowScrollTop(false);
         return;
       }
-      const scrollHeight = document.documentElement.scrollHeight;
       const scrollTop = window.scrollY || document.documentElement.scrollTop;
-      const clientHeight = window.innerHeight || document.documentElement.clientHeight;
-      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-      setShowScrollBottom(distanceFromBottom > 120);
+      setShowScrollTop(scrollTop > 400);
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -965,16 +957,20 @@ function App() {
           </section>
         ) : (
           <section className="chat-view">
-            <section className="conversation" aria-live="polite">
-              {messages.map((message, index) => {
-                const isLatestAssistant =
-                  message.role === 'assistant' && index === messages.length - 1;
+            {renderComposer(true)}
+            
+            {hasGeneratedAnswer && (
+              <p className="ai-disclaimer" style={{ marginBottom: '20px' }}>
+                AI can make mistakes. Please verify important information using reliable sources.
+              </p>
+            )}
 
+            <section className="conversation" aria-live="polite">
+              {[...messages].reverse().map((message, index) => {
                 return (
                   <article
                     className={`message ${message.role}`}
                     key={message.id}
-                    ref={isLatestAssistant ? latestAssistantRef : null}
                   >
                     <div className="avatar">{message.role === 'user' ? 'You' : 'AI'}</div>
                     <div className="bubble">
@@ -1285,25 +1281,17 @@ function App() {
               <div ref={messagesEndRef} />
             </section>
 
-            {hasGeneratedAnswer && (
-              <p className="ai-disclaimer">
-                AI can make mistakes. Please verify important information using reliable sources.
-              </p>
-            )}
-
-            {renderComposer(true)}
-
-            {showScrollBottom && (
+            {showScrollTop && (
               <button
                 type="button"
                 className="scroll-bottom-btn"
-                onClick={() => scrollToBottom('smooth')}
-                aria-label="Scroll to bottom of chat"
-                title="Scroll to bottom"
+                onClick={() => scrollToTop('smooth')}
+                aria-label="Scroll to top"
+                title="Scroll to top"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <polyline points="19 12 12 19 5 12" />
+                  <line x1="12" y1="19" x2="12" y2="5" />
+                  <polyline points="5 12 12 5 19 12" />
                 </svg>
               </button>
             )}

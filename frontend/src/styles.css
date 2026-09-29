@@ -256,10 +256,9 @@ textarea:focus {
 }
 
 .composer-panel.compact {
-  position: sticky;
-  bottom: 0;
-  margin-top: 28px;
-  border-radius: 22px 22px 0 0;
+  position: relative;
+  margin-bottom: 24px;
+  border-radius: 24px;
   z-index: 4;
 }
 
@@ -325,10 +324,6 @@ textarea:focus {
   font-size: 0.75rem;
   line-height: 1.4;
   text-align: center;
-}
-
-.chat-view .ai-disclaimer + .composer-panel.compact {
-  margin-top: 0;
 }
 
 .scroll-bottom-btn {

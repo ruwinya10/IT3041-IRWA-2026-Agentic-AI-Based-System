@@ -68,6 +68,7 @@ PDF_WEIGHT = 4.0
 class ResearchRequest(BaseModel):
     question: str
     user_id: int
+    document_id: Optional[int] = None
 
 
 # ============================================================
@@ -2048,10 +2049,11 @@ async def research(
     # ========================================================
 
     local_context = search_uploaded_documents(
-        user_id=req.user_id,
-        query=question,
-        n_results=3,
-    )
+    user_id=req.user_id,
+    query=question,
+    n_results=3,
+    document_id=req.document_id,
+)
 
     local_context_summary = build_local_context_summary(
         local_context

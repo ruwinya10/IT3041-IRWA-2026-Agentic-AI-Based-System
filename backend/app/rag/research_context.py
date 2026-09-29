@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.rag.vector_store import search as search_vector_store
 
@@ -86,18 +86,17 @@ def search_uploaded_documents(
     user_id: int,
     query: str,
     n_results: int = DEFAULT_LOCAL_RESULTS,
+    document_id: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """
     Search the current user's uploaded documents.
 
-    This function reuses the existing Chroma vector store.
+    If document_id is provided, retrieval is restricted to
+    that specific uploaded document.
 
-    Important:
-    vector_store.search() already applies:
-
-        where={"user_id": user_id}
-
-    Therefore document retrieval remains isolated by user.
+    If document_id is not provided, the original behaviour is
+    preserved and all documents belonging to the user may be
+    searched.
 
     Chroma errors are handled here so that a temporary local
     retrieval problem does not destroy otherwise valid
@@ -120,6 +119,7 @@ def search_uploaded_documents(
             user_id=user_id,
             query=clean_query,
             n_results=safe_n_results,
+            document_id=document_id,
         )
 
         return format_local_context(raw_results)
@@ -127,8 +127,9 @@ def search_uploaded_documents(
     except Exception:
         logger.exception(
             "Failed to retrieve uploaded document context "
-            "for user_id=%s.",
+            "for user_id=%s, document_id=%s.",
             user_id,
+            document_id,
         )
 
         return []

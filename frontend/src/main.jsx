@@ -577,24 +577,7 @@ function App() {
                           </div>
                         )}
 
-                        {message.sources?.length ? (
-                          <details className="evidence-drawer">
-                            <summary>Sources</summary>
-                            {message.sources.map((s, i) => (
-                              <div className="source" key={`${s.title}-${i}`}>
-                                <b>{s.title}</b> ({s.year || 'n.d.'})
-                                <br />
-                                {s.doi || s.url ? (
-                                  <a href={s.doi || s.url} target="_blank" rel="noopener noreferrer">
-                                    {s.doi || s.url}
-                                  </a>
-                                ) : (
-                                  <span>No DOI/URL returned</span>
-                                )}
-                              </div>
-                            ))}
-                          </details>
-                        ) : null}
+                        
 
 <ResearchSources sources={message.sources} />
 

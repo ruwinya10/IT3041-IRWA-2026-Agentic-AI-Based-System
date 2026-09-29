@@ -1820,48 +1820,36 @@ async def search_multiple_queries(
     academic_filters: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Search generated OpenAlex queries concurrently and merge
+    Search generated OpenAlex queries sequentially and merge
     duplicate papers.
+
+    Sequential requests reduce the chance of triggering
+    OpenAlex rate limits when multiple research queries are
+    generated for one user question.
     """
 
     if not queries:
         return []
 
-    tasks = [
-        openalex_search(
-            query=query,
-            per_page=RESULTS_PER_QUERY,
-            academic_filters=academic_filters,
-        )
-        for query in queries
-    ]
-
-    results = await asyncio.gather(
-        *tasks,
-        return_exceptions=True,
-    )
-
     successful_groups = []
 
-    for query, result in zip(
-        queries,
-        results,
-    ):
+    for query in queries:
+        try:
+            result = await openalex_search(
+                query=query,
+                per_page=RESULTS_PER_QUERY,
+                academic_filters=academic_filters,
+            )
 
-        if isinstance(
-            result,
-            Exception,
-        ):
+            successful_groups.append(result)
+
+        except Exception as exc:
             logger.error(
                 "Search query failed: '%s' - %s",
                 query,
-                result,
+                exc,
             )
             continue
-
-        successful_groups.append(
-            result
-        )
 
     if not successful_groups:
         raise HTTPException(

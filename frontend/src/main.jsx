@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import logo from './assets/researchmind-logo.png';
+import ResearchSources from './ResearchSources';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -534,6 +535,7 @@ function App() {
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
                         </div>
 
+
                         {message.verification && (
                           <div className="verification-card">
                             <div>
@@ -593,6 +595,9 @@ function App() {
                             ))}
                           </details>
                         ) : null}
+
+<ResearchSources sources={message.sources} />
+
                       </>
                     )}
                   </div>

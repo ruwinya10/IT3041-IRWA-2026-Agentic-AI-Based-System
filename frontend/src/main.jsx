@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import logo from './assets/researchmind-logo.png';
 import './styles.css';
+import StudyAssistant from './StudyAssistant';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const QUICK_TOPICS = [
@@ -41,6 +42,7 @@ function verificationSummary(verification) {
 }
 
 function App() {
+  const [currentTab, setCurrentTab] = useState('chat');
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
@@ -458,7 +460,13 @@ function App() {
           </div>
         </div>
         <div className="topbar-actions">
-          {messages.length > 0 && (
+          <button className="ghost-button" type="button" onClick={() => setCurrentTab('chat')} style={{background: currentTab === 'chat' ? 'var(--soft-line)' : 'transparent'}}>
+            Chat
+          </button>
+          <button className="ghost-button" type="button" onClick={() => setCurrentTab('study')} style={{background: currentTab === 'study' ? 'var(--soft-line)' : 'transparent'}}>
+            Study Assistant
+          </button>
+          {messages.length > 0 && currentTab === 'chat' && (
             <button className="ghost-button" type="button" onClick={startNewChat}>
               New chat
             </button>
@@ -469,6 +477,7 @@ function App() {
         </div>
       </header>
 
+      {currentTab === 'chat' ? (
       <main className="workspace">
         {messages.length === 0 ? (
           <section className="home-view">
@@ -627,6 +636,9 @@ function App() {
           </section>
         )}
       </main>
+      ) : (
+        <StudyAssistant token={token} API={API} />
+      )}
     </div>
   );
 }

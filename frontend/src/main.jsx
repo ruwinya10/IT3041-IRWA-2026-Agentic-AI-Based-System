@@ -4,16 +4,15 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import logo from './assets/researchmind-logo.png';
 import './styles.css';
-import StudyAssistant from './StudyAssistant';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const QUICK_TOPICS = [
-  { icon: '📄', label: 'Summarize PDF', prompt: 'Summarize my uploaded PDF' },
-  { icon: '🔎', label: 'Find papers', prompt: 'Find research papers about this topic' },
-  { icon: '💡', label: 'Explain concept', prompt: 'Explain this concept with examples' },
-  { icon: '❓', label: 'Generate quiz', prompt: 'Generate a quiz with practice questions about this topic' },
-  { icon: '🧠', label: 'Study notes', prompt: 'Turn this into study notes' },
-  { icon: '✅', label: 'Verify answer', prompt: 'Verify this answer with evidence' },
+  { icon: '📄', label: 'Summarize PDF', tool: 'summarize', prompt: 'Summarize my uploaded PDF in exam revision mode' },
+  { icon: '🔎', label: 'Find papers', tool: 'chat', prompt: 'Find recent research papers about ' },
+  { icon: '💡', label: 'Explain concept', tool: 'explain', prompt: 'Explain the concept of ' },
+  { icon: '❓', label: 'Generate quiz', tool: 'quiz', prompt: 'Generate practice quiz questions about ' },
+  { icon: '🧠', label: 'Study notes', tool: 'notes', prompt: 'Create structured study notes on ' },
+  { icon: '✅', label: 'Verify answer', tool: 'chat', prompt: 'Verify this claim with evidence: ' },
 ];
 
 function verificationScore(verification) {
@@ -41,8 +40,173 @@ function verificationSummary(verification) {
   return 'More supporting evidence is needed before this answer can be treated as verified.';
 }
 
+/* ============================================================
+   Interactive Study Widgets
+   ============================================================ */
+function InteractiveQuiz({ questions }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedAnswers, setSelectedAnswers] = useState({});
+  const [showResult, setShowResult] = useState(false);
+
+  if (!questions || !questions.length) return <p>No questions generated.</p>;
+
+  if (showResult) {
+    let score = 0;
+    questions.forEach((q, idx) => {
+      if (selectedAnswers[idx] === q.correct_answer) score++;
+    });
+    const pct = Math.round((score / questions.length) * 100);
+    return (
+      <div className="quiz-summary-card">
+        <div className="study-badge">Quiz Results</div>
+        <div className="quiz-summary-score">{pct}%</div>
+        <p>You scored <strong>{score}</strong> out of <strong>{questions.length}</strong> ({pct}% correct).</p>
+        <button
+          type="button"
+          className="primary-button"
+          style={{ marginTop: '14px' }}
+          onClick={() => {
+            setSelectedAnswers({});
+            setCurrentIndex(0);
+            setShowResult(false);
+          }}
+        >
+          Retake Quiz
+        </button>
+      </div>
+    );
+  }
+
+  const currentQ = questions[currentIndex];
+  const userAnswer = selectedAnswers[currentIndex];
+  const isAnswered = userAnswer !== undefined;
+
+  return (
+    <div className="quiz-container">
+      <div className="quiz-header">
+        <span>Question {currentIndex + 1} of {questions.length}</span>
+        <span className="study-badge">Interactive MCQ Quiz</span>
+      </div>
+      <div className="quiz-question">{currentQ.question}</div>
+      <div className="quiz-options-list">
+        {currentQ.options?.map((opt, i) => {
+          let btnClass = 'quiz-opt-btn';
+          if (isAnswered) {
+            if (opt === currentQ.correct_answer) btnClass += ' correct';
+            else if (opt === userAnswer) btnClass += ' wrong';
+          }
+          return (
+            <button
+              key={i}
+              type="button"
+              className={btnClass}
+              disabled={isAnswered}
+              onClick={() => setSelectedAnswers(prev => ({ ...prev, [currentIndex]: opt }))}
+            >
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+
+      {isAnswered && (
+        <div className={`quiz-explanation-box ${userAnswer === currentQ.correct_answer ? 'correct' : 'wrong'}`}>
+          <strong>{userAnswer === currentQ.correct_answer ? '✓ Correct!' : '✗ Incorrect.'}</strong>{' '}
+          {currentQ.explanation}
+        </div>
+      )}
+
+      {isAnswered && (
+        <div className="quiz-nav-row">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => {
+              if (currentIndex < questions.length - 1) {
+                setCurrentIndex(currentIndex + 1);
+              } else {
+                setShowResult(true);
+              }
+            }}
+          >
+            {currentIndex < questions.length - 1 ? 'Next Question →' : 'View Final Score'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InteractiveFlashcards({ flashcards }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [mastered, setMastered] = useState({});
+
+  if (!flashcards || !flashcards.length) return <p>No flashcards generated.</p>;
+  const currentCard = flashcards[currentIndex];
+
+  return (
+    <div className="flashcard-box">
+      <div className="flashcard-header">
+        <span>Card {currentIndex + 1} of {flashcards.length}</span>
+        <span className="study-badge">Interactive Flashcards</span>
+      </div>
+      <div
+        className="flashcard-card"
+        onClick={() => setIsFlipped(!isFlipped)}
+        title="Click to flip"
+      >
+        <span className="flashcard-side-tag">{isFlipped ? 'Back (Explanation / Definition)' : 'Front (Term / Concept)'}</span>
+        <div className="flashcard-text">
+          {isFlipped ? currentCard.back : currentCard.front}
+        </div>
+        <span className="flashcard-hint">↻ Click card to flip</span>
+      </div>
+      <div className="flashcard-controls">
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={currentIndex === 0}
+          onClick={() => {
+            setIsFlipped(false);
+            setCurrentIndex(c => Math.max(0, c - 1));
+          }}
+        >
+          ← Previous
+        </button>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button
+            type="button"
+            className={`opt-pill ${mastered[currentIndex] === 'know' ? 'active' : ''}`}
+            onClick={() => setMastered(prev => ({ ...prev, [currentIndex]: 'know' }))}
+          >
+            ✓ I know this
+          </button>
+          <button
+            type="button"
+            className={`opt-pill ${mastered[currentIndex] === 'revise' ? 'active' : ''}`}
+            onClick={() => setMastered(prev => ({ ...prev, [currentIndex]: 'revise' }))}
+          >
+            ↺ Need to revise
+          </button>
+        </div>
+        <button
+          type="button"
+          className="primary-button"
+          disabled={currentIndex === flashcards.length - 1}
+          onClick={() => {
+            setIsFlipped(false);
+            setCurrentIndex(c => Math.min(flashcards.length - 1, c + 1));
+          }}
+        >
+          Next →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function App() {
-  const [currentTab, setCurrentTab] = useState('chat');
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
@@ -57,6 +221,13 @@ function App() {
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const messagesEndRef = useRef(null);
   const latestAssistantRef = useRef(null);
+
+  // Study tool modes inside the composer
+  const [selectedTool, setSelectedTool] = useState('chat'); // 'chat' | 'explain' | 'summarize' | 'quiz' | 'flashcards' | 'notes' | 'keywords' | 'ner'
+  const [explainLevel, setExplainLevel] = useState('Normal'); // 'Simple' | 'Normal' | 'Detailed'
+  const [summaryMode, setSummaryMode] = useState('Exam Revision'); // 'Quick Summary' | 'Detailed Summary' | 'Bullet Point Summary' | 'Exam Revision'
+  const [quizCount, setQuizCount] = useState(5);
+  const [quizDifficulty, setQuizDifficulty] = useState('Medium');
 
   function scrollToBottom(behavior = 'smooth') {
     if (messagesEndRef.current) {
@@ -150,20 +321,6 @@ function App() {
     }
   }
 
-  async function upload() {
-    if (!file) {
-      setStatus('Choose a PDF before uploading.');
-      return;
-    }
-
-    try {
-      await uploadSelectedFile();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      setStatus(errorMessage);
-    }
-  }
-
   async function uploadSelectedFile() {
     setStatus('Uploading and indexing your PDF...');
     const fd = new FormData();
@@ -194,9 +351,113 @@ function App() {
     return d;
   }
 
+  async function executeStudyAction(task, contentToProcess, customOptions = {}) {
+    const text = (contentToProcess || '').trim();
+    if (!text || isAsking) return;
+
+    const taskLabels = {
+      explain: `Explain Concept (${customOptions.level || explainLevel})`,
+      summarize: `Summarize (${customOptions.mode || summaryMode})`,
+      quiz: `Quiz (${customOptions.count || quizCount} Qs, ${customOptions.difficulty || quizDifficulty})`,
+      flashcards: 'Flashcards',
+      notes: 'Study Notes',
+      keywords: 'Keywords (TF-IDF NLP)',
+      ner: 'Named Entity Recognition (spaCy)'
+    };
+
+    const userMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: `${taskLabels[task] || task}: "${text.length > 70 ? text.substring(0, 70) + '...' : text}"`,
+    };
+    const pendingMessage = { id: crypto.randomUUID(), role: 'assistant', loading: true };
+
+    setMessages((current) => [...current, userMessage, pendingMessage]);
+    setIsAsking(true);
+    setStatus(`Study/NLP Agent is processing ${task}...`);
+
+    try {
+      const mergedOptions = {
+        level: customOptions.level || explainLevel,
+        mode: customOptions.mode || summaryMode,
+        count: customOptions.count || quizCount,
+        difficulty: customOptions.difficulty || quizDifficulty,
+        ...customOptions
+      };
+
+      const res = await fetch(`${API}/api/study/process`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
+        body: JSON.stringify({
+          task,
+          content: text,
+          options: mergedOptions,
+        }),
+      });
+
+      const d = await res.json();
+      if (!res.ok || !d.success) {
+        if (res.status === 401 || d.detail === 'Invalid or expired token') {
+          handleAuthExpired();
+          return;
+        }
+        setMessages((current) =>
+          current.map((msg) =>
+            msg.id === pendingMessage.id
+              ? { ...msg, loading: false, error: d.error || d.detail || 'Request failed' }
+              : msg
+          )
+        );
+        setStatus(d.error || d.detail || 'Request failed');
+        return;
+      }
+
+      setMessages((current) =>
+        current.map((msg) =>
+          msg.id === pendingMessage.id
+            ? {
+                ...msg,
+                loading: false,
+                content: d.data?.summary || d.data?.explanation || `Generated ${task} successfully.`,
+                rawContent: text,
+                studyTask: task,
+                studyData: d.data,
+                options: mergedOptions,
+                route: 'Study/NLP Agent',
+              }
+            : msg
+        )
+      );
+      setStatus('Completed.');
+    } catch (err) {
+      console.error(err);
+      setMessages((current) =>
+        current.map((msg) =>
+          msg.id === pendingMessage.id
+            ? { ...msg, loading: false, error: 'Could not connect to the Study/NLP Agent.' }
+            : msg
+        )
+      );
+      setStatus('Unable to connect.');
+    } finally {
+      setIsAsking(false);
+    }
+  }
+
   async function ask() {
     const submittedQuestion = question.trim();
     if (!submittedQuestion || isAsking) return;
+
+    // If a study tool is selected, route directly via Study/NLP Agent
+    if (selectedTool !== 'chat') {
+      const toolToRun = selectedTool;
+      setQuestion('');
+      executeStudyAction(toolToRun, submittedQuestion);
+      return;
+    }
 
     const attachedFileName = file?.name || '';
     const userMessage = {
@@ -275,6 +536,7 @@ function App() {
                 ...message,
                 loading: false,
                 content: d.answer,
+                rawContent: d.answer,
                 sources: d.sources || [],
                 verification: d.verification,
                 route: routeText,
@@ -319,6 +581,7 @@ function App() {
     setMessages([]);
     setQuestion('');
     setStatus('');
+    setSelectedTool('chat');
   }
 
   function removeAttachedFile() {
@@ -326,13 +589,157 @@ function App() {
     setStatus('');
   }
 
+  function handleQuickTopicClick(topic) {
+    if (topic.tool) {
+      setSelectedTool(topic.tool);
+    }
+    if (topic.prompt) {
+      setQuestion(topic.prompt);
+    }
+  }
+
   const hasGeneratedAnswer = messages.some(
     (message) => message.role === 'assistant' && !message.loading && Boolean(message.content)
   );
 
+  function getPlaceholder() {
+    if (file) return 'Ask about the attached PDF...';
+    switch (selectedTool) {
+      case 'explain': return `Enter concept to explain (${explainLevel} level)...`;
+      case 'summarize': return `Enter topic or paste text to summarize (${summaryMode})...`;
+      case 'quiz': return `Enter concept or paste text to generate a ${quizDifficulty} quiz...`;
+      case 'flashcards': return 'Enter concept or paste text to generate flashcards...';
+      case 'notes': return 'Enter topic or paste content to create structured notes...';
+      case 'keywords': return 'Paste text or enter concept to extract NLP keywords...';
+      case 'ner': return 'Paste text to run spaCy Named Entity Recognition...';
+      default: return 'Ask your question, paste study material, or research a topic...';
+    }
+  }
+
   function renderComposer(isCompact = false) {
     return (
       <section className={`composer-panel ${isCompact ? 'compact' : ''}`}>
+        {/* Unified Tool Selector inside the composer */}
+        <div className="tool-bar">
+          <div className="tool-selector">
+            <button
+              type="button"
+              className={`tool-chip ${selectedTool === 'chat' ? 'active' : ''}`}
+              onClick={() => setSelectedTool('chat')}
+            >
+              💬 Ask / Research
+            </button>
+            <button
+              type="button"
+              className={`tool-chip ${selectedTool === 'explain' ? 'active' : ''}`}
+              onClick={() => setSelectedTool('explain')}
+            >
+              💡 Explain
+            </button>
+            <button
+              type="button"
+              className={`tool-chip ${selectedTool === 'summarize' ? 'active' : ''}`}
+              onClick={() => setSelectedTool('summarize')}
+            >
+              📝 Summarize
+            </button>
+            <button
+              type="button"
+              className={`tool-chip ${selectedTool === 'quiz' ? 'active' : ''}`}
+              onClick={() => setSelectedTool('quiz')}
+            >
+              ❓ Quiz
+            </button>
+            <button
+              type="button"
+              className={`tool-chip ${selectedTool === 'flashcards' ? 'active' : ''}`}
+              onClick={() => setSelectedTool('flashcards')}
+            >
+              🗂 Flashcards
+            </button>
+            <button
+              type="button"
+              className={`tool-chip ${selectedTool === 'notes' ? 'active' : ''}`}
+              onClick={() => setSelectedTool('notes')}
+            >
+              🧠 Notes
+            </button>
+            <button
+              type="button"
+              className={`tool-chip ${selectedTool === 'keywords' ? 'active' : ''}`}
+              onClick={() => setSelectedTool('keywords')}
+            >
+              🔑 Keywords
+            </button>
+            <button
+              type="button"
+              className={`tool-chip ${selectedTool === 'ner' ? 'active' : ''}`}
+              onClick={() => setSelectedTool('ner')}
+            >
+              🏷 NER
+            </button>
+          </div>
+
+          {selectedTool === 'explain' && (
+            <div className="tool-options">
+              <span>Explanation Level:</span>
+              {['Simple', 'Normal', 'Detailed'].map((lvl) => (
+                <button
+                  key={lvl}
+                  type="button"
+                  className={`opt-pill ${explainLevel === lvl ? 'active' : ''}`}
+                  onClick={() => setExplainLevel(lvl)}
+                >
+                  {lvl}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {selectedTool === 'summarize' && (
+            <div className="tool-options">
+              <span>Summary Style:</span>
+              {['Quick Summary', 'Detailed Summary', 'Bullet Point Summary', 'Exam Revision'].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`opt-pill ${summaryMode === m ? 'active' : ''}`}
+                  onClick={() => setSummaryMode(m)}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {selectedTool === 'quiz' && (
+            <div className="tool-options">
+              <span>Questions:</span>
+              {[5, 10, 15].map((cnt) => (
+                <button
+                  key={cnt}
+                  type="button"
+                  className={`opt-pill ${quizCount === cnt ? 'active' : ''}`}
+                  onClick={() => setQuizCount(cnt)}
+                >
+                  {cnt} Qs
+                </button>
+              ))}
+              <span style={{ marginLeft: '10px' }}>Difficulty:</span>
+              {['Easy', 'Medium', 'Hard'].map((diff) => (
+                <button
+                  key={diff}
+                  type="button"
+                  className={`opt-pill ${quizDifficulty === diff ? 'active' : ''}`}
+                  onClick={() => setQuizDifficulty(diff)}
+                >
+                  {diff}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {file && (
           <div className="attachment-card">
             <div className="attachment-icon">PDF</div>
@@ -353,7 +760,7 @@ function App() {
           </label>
           <textarea
             rows="1"
-            placeholder={file ? 'Ask about the attached PDF...' : 'Ask your question...'}
+            placeholder={getPlaceholder()}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => {
@@ -363,14 +770,18 @@ function App() {
               }
             }}
           />
-          <button className="send-button" type="button" onClick={ask} disabled={isAsking} aria-label="Ask ResearchMind">
-            {isAsking ? '...' : 'Send'}
+          <button className="send-button" type="button" onClick={ask} disabled={isAsking} aria-label="Send query">
+            {isAsking ? '...' : selectedTool === 'chat' ? 'Send' : 'Run'}
           </button>
         </div>
 
         <div className="composer-footer">
           <p className="composer-hint">
-            {file ? 'Send will upload the PDF first, then ask your question.' : 'Enter to send. Shift + Enter for a new line.'}
+            {file
+              ? 'Send will upload the PDF first, then process with selected tool.'
+              : selectedTool === 'chat'
+              ? 'Enter to send. Coordinator will route to the best agents.'
+              : `Enter to run with ${selectedTool.toUpperCase()} tool. Shift + Enter for newline.`}
           </p>
         </div>
 
@@ -460,13 +871,7 @@ function App() {
           </div>
         </div>
         <div className="topbar-actions">
-          <button className="ghost-button" type="button" onClick={() => setCurrentTab('chat')} style={{background: currentTab === 'chat' ? 'var(--soft-line)' : 'transparent'}}>
-            Chat
-          </button>
-          <button className="ghost-button" type="button" onClick={() => setCurrentTab('study')} style={{background: currentTab === 'study' ? 'var(--soft-line)' : 'transparent'}}>
-            Study Assistant
-          </button>
-          {messages.length > 0 && currentTab === 'chat' && (
+          {messages.length > 0 && (
             <button className="ghost-button" type="button" onClick={startNewChat}>
               New chat
             </button>
@@ -477,7 +882,6 @@ function App() {
         </div>
       </header>
 
-      {currentTab === 'chat' ? (
       <main className="workspace">
         {messages.length === 0 ? (
           <section className="home-view">
@@ -491,7 +895,12 @@ function App() {
 
             <section className="quick-topics" aria-label="ResearchMind features">
               {QUICK_TOPICS.map((topic) => (
-                <div className="feature-card" key={topic.label}>
+                <div
+                  className="feature-card"
+                  key={topic.label}
+                  onClick={() => handleQuickTopicClick(topic)}
+                  title={`Click to use: ${topic.label}`}
+                >
                   <span className="topic-icon" aria-hidden="true">
                     {topic.icon}
                   </span>
@@ -513,102 +922,295 @@ function App() {
                     key={message.id}
                     ref={isLatestAssistant ? latestAssistantRef : null}
                   >
-                  <div className="avatar">{message.role === 'user' ? 'You' : 'AI'}</div>
-                  <div className="bubble">
-                    {message.loading ? (
-                      <div className="typing">
-                        <span />
-                        <span />
-                        <span />
-                      </div>
-                    ) : message.error ? (
-                      <p className="error-text">{message.error}</p>
-                    ) : message.role === 'user' ? (
-                      <>
-                        {message.attachedFileName && (
-                          <p className="attachment-note">
-                            Attached PDF: <strong>{message.attachedFileName}</strong>
-                          </p>
-                        )}
-                        <p>{message.content}</p>
-                      </>
-                    ) : (
-                      <>
-                        {message.uploadedFile && (
-                          <p className="attachment-note">
-                            Used PDF: <strong>{message.uploadedFile.filename}</strong>
-                          </p>
-                        )}
-                        <div className="answer">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                    <div className="avatar">{message.role === 'user' ? 'You' : 'AI'}</div>
+                    <div className="bubble">
+                      {message.loading ? (
+                        <div className="typing">
+                          <span />
+                          <span />
+                          <span />
                         </div>
-
-                        {message.verification && (
-                          <div className="verification-card">
-                            <div>
-                              <span>Verification</span>
-                              <strong>{verificationLabel(message.verification)}</strong>
-                            </div>
-                            <div className="verification-score">
-                              {verificationScore(message.verification)}%
-                            </div>
-                            <p>
-                              Confidence: <b>{message.verification.confidence || 'unknown'}</b>
-                              {typeof message.verification.evidence_count === 'number'
-                                ? ` • Evidence checked: ${message.verification.evidence_count}`
-                                : ''}
+                      ) : message.error ? (
+                        <p className="error-text">{message.error}</p>
+                      ) : message.role === 'user' ? (
+                        <>
+                          {message.attachedFileName && (
+                            <p className="attachment-note">
+                              Attached PDF: <strong>{message.attachedFileName}</strong>
                             </p>
-                            <div className="verification-details">
-                              <p>{verificationSummary(message.verification)}</p>
-                              {message.verification.issues?.length ? (
-                                <div>
-                                  <span>Areas to improve</span>
-                                  <ul>
-                                    {message.verification.issues.slice(0, 3).map((issue, index) => (
-                                      <li key={`${issue}-${index}`}>{issue}</li>
-                                    ))}
-                                  </ul>
+                          )}
+                          <p>{message.content}</p>
+                        </>
+                      ) : (
+                        <>
+                          {message.uploadedFile && (
+                            <p className="attachment-note">
+                              Used PDF: <strong>{message.uploadedFile.filename}</strong>
+                            </p>
+                          )}
+
+                          {/* Interactive Study Data Widget */}
+                          {message.studyData ? (
+                            <div className="study-result-wrapper">
+                              {message.studyTask === 'explain' && (
+                                <div className="structured-exp">
+                                  <div className="study-badge">Academic Explanation ({message.options?.level || 'Normal'})</div>
+                                  <div className="exp-section">
+                                    <h4>Explanation</h4>
+                                    <p>{message.studyData.explanation}</p>
+                                  </div>
+                                  {message.studyData.key_points?.length > 0 && (
+                                    <div className="exp-section">
+                                      <h4>Key Points</h4>
+                                      <ul>
+                                        {message.studyData.key_points.map((pt, i) => (
+                                          <li key={i}>{pt}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  {message.studyData.important_concepts?.length > 0 && (
+                                    <div className="exp-section">
+                                      <h4>Important Concepts</h4>
+                                      <div className="concept-pills">
+                                        {message.studyData.important_concepts.map((concept, i) => (
+                                          <span key={i} className="concept-pill">{concept}</span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {message.studyData.examples?.length > 0 && (
+                                    <div className="exp-section">
+                                      <h4>Examples</h4>
+                                      <ul>
+                                        {message.studyData.examples.map((ex, i) => (
+                                          <li key={i}>{ex}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
                                 </div>
-                              ) : null}
-                              {message.verification.corrections?.length ? (
+                              )}
+
+                              {message.studyTask === 'summarize' && (
                                 <div>
-                                  <span>Suggested fixes</span>
-                                  <ul>
-                                    {message.verification.corrections.slice(0, 3).map((correction, index) => (
-                                      <li key={`${correction}-${index}`}>{correction}</li>
-                                    ))}
-                                  </ul>
+                                  <div className="study-badge">Smart Summary ({message.options?.mode || 'Summary'})</div>
+                                  <p style={{ lineHeight: 1.6, fontSize: '0.96rem' }}>{message.studyData.summary}</p>
+                                  {message.studyData.bullet_points?.length > 0 && (
+                                    <ul style={{ marginTop: '10px' }}>
+                                      {message.studyData.bullet_points.map((pt, i) => (
+                                        <li key={i}>{pt}</li>
+                                      ))}
+                                    </ul>
+                                  )}
                                 </div>
-                              ) : null}
+                              )}
+
+                              {message.studyTask === 'quiz' && (
+                                <InteractiveQuiz questions={message.studyData.questions} />
+                              )}
+
+                              {message.studyTask === 'flashcards' && (
+                                <InteractiveFlashcards flashcards={message.studyData.flashcards} />
+                              )}
+
+                              {message.studyTask === 'keywords' && (
+                                <div>
+                                  <div className="study-badge">TF-IDF Keyword Extraction (NLP)</div>
+                                  <div className="keywords-grid">
+                                    {message.studyData.keywords?.map((k, i) => (
+                                      <div key={i} className="keyword-card">
+                                        <div className="keyword-top">
+                                          <span className="keyword-term">{k.term}</span>
+                                          <span className={`keyword-badge ${k.importance || 'medium'}`}>
+                                            {k.importance || 'keyword'}
+                                          </span>
+                                        </div>
+                                        {k.definition && <p className="keyword-def">{k.definition}</p>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {message.studyTask === 'ner' && (
+                                <div className="ner-group">
+                                  <div className="study-badge">Named Entity Recognition (spaCy NLP)</div>
+                                  <div className="ner-badges-container">
+                                    {message.studyData.entities?.map((ent, i) => {
+                                      const lbl = (ent.label || '').toLowerCase();
+                                      let typeClass = 'default';
+                                      if (lbl.includes('person')) typeClass = 'person';
+                                      else if (lbl.includes('org')) typeClass = 'organization';
+                                      else if (lbl.includes('loc') || lbl.includes('gpe')) typeClass = 'location';
+                                      else if (lbl.includes('date')) typeClass = 'date';
+                                      else if (lbl.includes('product') || lbl.includes('tech')) typeClass = 'technology';
+
+                                      return (
+                                        <span key={i} className={`ner-chip ${typeClass}`}>
+                                          <strong>{ent.text}</strong>
+                                          <span className="ner-type-tag">{ent.label}</span>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                  {(!message.studyData.entities || !message.studyData.entities.length) && (
+                                    <p className="muted">No specific named entities detected in the text.</p>
+                                  )}
+                                </div>
+                              )}
+
+                              {message.studyTask === 'notes' && (
+                                <div>
+                                  <div className="study-badge">Structured Study Notes</div>
+                                  {Object.entries(message.studyData.notes || {}).map(([sec, val], i) => (
+                                    <div key={i} className="exp-section" style={{ marginTop: '10px' }}>
+                                      <h4>{sec}</h4>
+                                      {Array.isArray(val) ? (
+                                        <ul>{val.map((item, j) => <li key={j}>{item}</li>)}</ul>
+                                      ) : (
+                                        <p>{val}</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="answer">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                            </div>
+                          )}
+
+                          {message.verification && (
+                            <div className="verification-card">
+                              <div>
+                                <span>Verification</span>
+                                <strong>{verificationLabel(message.verification)}</strong>
+                              </div>
+                              <div className="verification-score">
+                                {verificationScore(message.verification)}%
+                              </div>
+                              <p>
+                                Confidence: <b>{message.verification.confidence || 'unknown'}</b>
+                                {typeof message.verification.evidence_count === 'number'
+                                  ? ` • Evidence checked: ${message.verification.evidence_count}`
+                                  : ''}
+                              </p>
+                              <div className="verification-details">
+                                <p>{verificationSummary(message.verification)}</p>
+                                {message.verification.issues?.length ? (
+                                  <div>
+                                    <span>Areas to improve</span>
+                                    <ul>
+                                      {message.verification.issues.slice(0, 3).map((issue, i) => (
+                                        <li key={`${issue}-${i}`}>{issue}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                                {message.verification.corrections?.length ? (
+                                  <div>
+                                    <span>Suggested fixes</span>
+                                    <ul>
+                                      {message.verification.corrections.slice(0, 3).map((correction, i) => (
+                                        <li key={`${correction}-${i}`}>{correction}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          )}
+
+                          {message.sources?.length ? (
+                            <details className="evidence-drawer">
+                              <summary>Sources</summary>
+                              {message.sources.map((s, i) => (
+                                <div className="source" key={`${s.title}-${i}`}>
+                                  <b>{s.title}</b> ({s.year || 'n.d.'})
+                                  <br />
+                                  {s.doi || s.url ? (
+                                    <a href={s.doi || s.url} target="_blank" rel="noopener noreferrer">
+                                      {s.doi || s.url}
+                                    </a>
+                                  ) : (
+                                    <span>No DOI/URL returned</span>
+                                  )}
+                                </div>
+                              ))}
+                            </details>
+                          ) : null}
+
+                          {/* Quick Follow-up Study Actions */}
+                          <div className="followup-bar">
+                            <span className="followup-label">Follow-up Study Actions</span>
+                            <div className="followup-chips">
+                              <button
+                                className="followup-btn"
+                                type="button"
+                                onClick={() => executeStudyAction('explain', message.rawContent || message.content, { level: 'Simple' })}
+                              >
+                                💡 Explain simpler
+                              </button>
+                              <button
+                                className="followup-btn"
+                                type="button"
+                                onClick={() => executeStudyAction('explain', message.rawContent || message.content, { level: 'Detailed' })}
+                              >
+                                🔍 More detail
+                              </button>
+                              <button
+                                className="followup-btn"
+                                type="button"
+                                onClick={() => executeStudyAction('summarize', message.rawContent || message.content, { mode: 'Exam Revision' })}
+                              >
+                                📝 Exam summary
+                              </button>
+                              <button
+                                className="followup-btn"
+                                type="button"
+                                onClick={() => executeStudyAction('quiz', message.rawContent || message.content, { count: 5, difficulty: 'Medium' })}
+                              >
+                                ❓ Generate quiz
+                              </button>
+                              <button
+                                className="followup-btn"
+                                type="button"
+                                onClick={() => executeStudyAction('flashcards', message.rawContent || message.content, {})}
+                              >
+                                🗂 Flashcards
+                              </button>
+                              <button
+                                className="followup-btn"
+                                type="button"
+                                onClick={() => executeStudyAction('notes', message.rawContent || message.content, {})}
+                              >
+                                🧠 Study notes
+                              </button>
+                              <button
+                                className="followup-btn"
+                                type="button"
+                                onClick={() => executeStudyAction('keywords', message.rawContent || message.content, {})}
+                              >
+                                🔑 Keywords
+                              </button>
+                              <button
+                                className="followup-btn"
+                                type="button"
+                                onClick={() => executeStudyAction('ner', message.rawContent || message.content, {})}
+                              >
+                                🏷 NER
+                              </button>
                             </div>
                           </div>
-                        )}
-
-                        {message.sources?.length ? (
-                          <details className="evidence-drawer">
-                            <summary>Sources</summary>
-                            {message.sources.map((s, i) => (
-                              <div className="source" key={`${s.title}-${i}`}>
-                                <b>{s.title}</b> ({s.year || 'n.d.'})
-                                <br />
-                                {s.doi || s.url ? (
-                                  <a href={s.doi || s.url} target="_blank" rel="noopener noreferrer">
-                                    {s.doi || s.url}
-                                  </a>
-                                ) : (
-                                  <span>No DOI/URL returned</span>
-                                )}
-                              </div>
-                            ))}
-                          </details>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-            <div ref={messagesEndRef} />
+                        </>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+              <div ref={messagesEndRef} />
             </section>
 
             {hasGeneratedAnswer && (
@@ -636,9 +1238,6 @@ function App() {
           </section>
         )}
       </main>
-      ) : (
-        <StudyAssistant token={token} API={API} />
-      )}
     </div>
   );
 }

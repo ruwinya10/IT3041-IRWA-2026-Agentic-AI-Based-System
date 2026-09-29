@@ -273,6 +273,24 @@ At the end, provide a short "Key points" section when appropriate.
         "extractive_summary": local_summary
     }
 
+def extract_json(raw: str):
+    raw = (raw or "").strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+    start_brace = raw.find("{")
+    start_bracket = raw.find("[")
+    if start_brace != -1 and (start_bracket == -1 or start_brace < start_bracket):
+        end = raw.rfind("}")
+        if end != -1:
+            return json.loads(raw[start_brace:end+1])
+    elif start_bracket != -1:
+        end = raw.rfind("]")
+        if end != -1:
+            return json.loads(raw[start_bracket:end+1])
+    return json.loads(raw)
+
+
 @app.post("/process")
 def process_study_task(req: StudyTaskRequest):
     try:
@@ -288,16 +306,16 @@ def process_study_task(req: StudyTaskRequest):
         if task == "explain":
             level = options.get("level", "Normal")
             sys_prompt = "You are an academic Study Agent. Output valid JSON with strictly these keys: 'explanation' (string), 'key_points' (array of strings), 'important_concepts' (array of strings), 'examples' (array of strings)."
-            usr_prompt = f"Explain this concept at a {level} level:\n\n{content}\n\nRespond only with valid JSON."
+            usr_prompt = f"Explain this concept/topic at a {level} level:\n\n{content}\n\nRespond ONLY with valid JSON."
             result_str = chat(sys_prompt, usr_prompt)
-            data = json.loads(result_str)
+            data = extract_json(result_str)
             
         elif task == "summarize":
             mode = options.get("mode", "Quick Summary")
             sys_prompt = "You are an academic summarizer. Output valid JSON with strictly these keys: 'summary' (string), 'bullet_points' (array of strings, if applicable)."
-            usr_prompt = f"Summarize this text in '{mode}' mode. Preserve meaning and do not invent unsupported info:\n\n{content}\n\nRespond only with valid JSON."
+            usr_prompt = f"Summarize this academic content in '{mode}' mode. Preserve meaning and do not invent unsupported info:\n\n{content}\n\nRespond ONLY with valid JSON."
             result_str = chat(sys_prompt, usr_prompt)
-            data = json.loads(result_str)
+            data = extract_json(result_str)
             
         elif task == "keywords":
             # Hybrid approach: tf-idf for keyword extraction, LLM for definitions
@@ -305,14 +323,16 @@ def process_study_task(req: StudyTaskRequest):
             terms = [k['term'] for k in keywords]
             if terms:
                 sys_prompt = "You are an academic dictionary. Given terms, return JSON array of objects with keys 'term', 'definition'. Keep definitions concise."
-                usr_prompt = f"Define these terms based on the context if possible: {', '.join(terms)}\n\nContext:\n{content}\n\nRespond only with valid JSON array."
+                usr_prompt = f"Define these terms based on the context if possible: {', '.join(terms)}\n\nContext:\n{content}\n\nRespond ONLY with valid JSON array."
                 defs_str = chat(sys_prompt, usr_prompt)
-                defs = json.loads(defs_str)
-                # merge
-                for k in keywords:
-                    for d in defs:
-                        if d.get("term", "").lower() == k["term"].lower():
-                            k["definition"] = d.get("definition", "")
+                try:
+                    defs = extract_json(defs_str)
+                    for k in keywords:
+                        for d in defs:
+                            if isinstance(d, dict) and d.get("term", "").lower() == k["term"].lower():
+                                k["definition"] = d.get("definition", "")
+                except Exception:
+                    pass
             data = {"keywords": keywords}
             
         elif task == "ner":
@@ -322,22 +342,22 @@ def process_study_task(req: StudyTaskRequest):
         elif task == "quiz":
             count = options.get("count", 5)
             difficulty = options.get("difficulty", "Medium")
-            sys_prompt = "You are a quiz generator. Output JSON as an array of objects. Keys: 'question', 'options' (array of 4 choices), 'correct_answer' (string), 'explanation' (string)."
-            usr_prompt = f"Generate {count} {difficulty} multiple-choice questions from this text. Do not invent facts:\n\n{content}\n\nRespond only with valid JSON array."
+            sys_prompt = "You are an educational quiz generator. Output JSON as an array of objects. Keys: 'question' (string), 'options' (array of 4 distinct choices), 'correct_answer' (exact string matching one of the options), 'explanation' (string)."
+            usr_prompt = f"Generate {count} {difficulty} multiple-choice questions from this academic text or topic. Keep them meaningful and factual:\n\n{content}\n\nRespond ONLY with valid JSON array."
             result_str = chat(sys_prompt, usr_prompt)
-            data = {"questions": json.loads(result_str)}
+            data = {"questions": extract_json(result_str)}
             
         elif task == "flashcards":
-            sys_prompt = "You are a flashcard generator. Output JSON as an array of objects. Keys: 'front' (string), 'back' (string)."
-            usr_prompt = f"Create 5-10 study flashcards from this text:\n\n{content}\n\nRespond only with valid JSON array."
+            sys_prompt = "You are an educational flashcard generator. Output JSON as an array of objects. Keys: 'front' (question or concept), 'back' (answer or explanation)."
+            usr_prompt = f"Create 5 to 10 high-yield study flashcards from this text or topic:\n\n{content}\n\nRespond ONLY with valid JSON array."
             result_str = chat(sys_prompt, usr_prompt)
-            data = {"flashcards": json.loads(result_str)}
+            data = {"flashcards": extract_json(result_str)}
             
         elif task == "notes":
-            sys_prompt = "You are a note-taker. Output valid JSON object with keys representing sections (e.g. 'Topic', 'Main concepts', 'Important points', 'Examples') mapping to arrays of strings or strings."
-            usr_prompt = f"Generate structured study notes from this text:\n\n{content}\n\nRespond only with valid JSON."
+            sys_prompt = "You are an academic note-taker. Output valid JSON object with keys representing organized sections (e.g. 'Topic', 'Definition', 'Main concepts', 'Important points', 'Examples', 'Exam revision') mapping to arrays of strings or strings."
+            usr_prompt = f"Generate structured study notes from this text or topic:\n\n{content}\n\nRespond ONLY with valid JSON."
             result_str = chat(sys_prompt, usr_prompt)
-            data = {"notes": json.loads(result_str)}
+            data = {"notes": extract_json(result_str)}
             
         else:
             return {"success": False, "agent": "study_nlp", "task": task, "error": f"Unknown task: {task}"}
@@ -350,7 +370,7 @@ def process_study_task(req: StudyTaskRequest):
             "metadata": {"options": options}
         }
     except json.JSONDecodeError as e:
-        return {"success": False, "agent": "study_nlp", "task": task, "error": f"LLM failed to return structured JSON. Details: {str(e)}"}
+        return {"success": False, "agent": "study_nlp", "task": task, "error": f"LLM returned invalid JSON structure: {str(e)}"}
     except Exception as e:
         logging.exception("Study Agent error")
         return {"success": False, "agent": "study_nlp", "task": task, "error": str(e)}

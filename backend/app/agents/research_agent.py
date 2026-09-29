@@ -96,7 +96,10 @@ STOP_WORDS = {
     "documents", "paper", "papers",
     "article", "articles", "assignment",
     "uploaded", "upload", "pdf", "source",
-    "sources", "research",
+    "sources", "research", "rank", "ranked", "ranking", "related",
+    "relevant", "recommend", "list", "improve", "improving",
+    "studies", "study", "using", "use", "how", "what", "which",
+    "by", "as", "at",
 }
 
 
@@ -182,7 +185,7 @@ def extract_keywords(
         if normalized in STOP_WORDS:
             continue
 
-        if len(normalized) < 3 and not any(
+        if len(normalized) < 2 and not any(
             char.isdigit()
             for char in normalized
         ):
@@ -245,8 +248,19 @@ def extract_topic_phrases(question: str) -> List[str]:
     phrases: List[str] = []
 
     for phrase in known_phrases:
-        if phrase in cleaned and phrase not in phrases:
+        if re.search(r"\b" + re.escape(phrase) + r"\b", cleaned) and phrase not in phrases:
             phrases.append(phrase)
+
+    # Learn adjacent concepts from the question, without a domain dictionary.
+    # Stop words and punctuation are boundaries: never invent a phrase by
+    # joining words that were separated by an instruction or a connector.
+    keywords = set(extract_keywords(question))
+    for segment in re.split(r"[^A-Za-z0-9\-\s]", question.lower()):
+        words = clean_text(segment).split()
+        for left, right in zip(words, words[1:]):
+            phrase = f"{left} {right}"
+            if left in keywords and right in keywords and phrase not in phrases:
+                phrases.append(phrase)
 
     return phrases
 
@@ -283,18 +297,18 @@ def generate_search_queries(
         if query_lower not in existing:
             queries.append(query)
 
-    # Query 1 - original question when reasonably short.
-    if cleaned_question:
+    # Prefer topical terms over conversational instructions in search requests.
+    if keywords:
+        add_query(" ".join(keywords[:8]))
+    elif cleaned_question:
         words = cleaned_question.split()
 
         if len(words) <= 15:
             add_query(cleaned_question)
 
-    # Query 2 - detected topic phrases.
-    if phrases:
-        add_query(
-            " ".join(phrases[:4])
-        )
+    # Search concepts separately rather than repeating overlapping n-grams.
+    for phrase in phrases[:3]:
+        add_query(phrase)
 
     # Query 3 - extracted keywords.
     if keywords:
@@ -1435,8 +1449,7 @@ def calculate_phrase_coverage(
 
         if (
             normalized_phrase
-            and normalized_phrase
-            in normalized_text
+            and re.search(r"\b" + re.escape(normalized_phrase) + r"\b", normalized_text)
         ):
             matches.append(phrase)
 
@@ -1762,7 +1775,7 @@ def rank_papers(
     phrases: List[str],
     total_queries: int,
 ) -> List[Dict[str, Any]]:
-    """Score and rank all candidate papers."""
+    """Gate on metadata evidence, then rank primarily by topical relevance."""
 
     ranked = []
 
@@ -1778,12 +1791,24 @@ def rank_papers(
             )
         )
 
-        ranked.append(
-            scored_paper
+        # A compound concept covering at least half the query, or broad
+        # keyword coverage, is required. A one-word query needs that word;
+        # no citation, access, or search-frequency bonus can pass this gate.
+        meaningful_keywords = set(keywords) - STOP_WORDS
+        matched = set(scored_paper["matched_keywords"]) & meaningful_keywords
+        coverage = len(matched) / len(meaningful_keywords) if meaningful_keywords else 0.0
+        compound_match = any(
+            len(set(phrase.split()) & meaningful_keywords) >= 2
+            for phrase in scored_paper["matched_phrases"]
         )
+        if coverage >= 0.75 or (compound_match and coverage >= 0.5):
+            ranked.append(scored_paper)
 
     ranked.sort(
         key=lambda paper: (
+            sum(paper["ranking_signals"][signal] for signal in (
+                "title_keyword", "title_phrase", "abstract_keyword", "abstract_phrase"
+            )),
             paper.get(
                 "relevance_score",
                 0,

@@ -717,13 +717,6 @@ function App() {
             >
               🔑 Keywords
             </button>
-            <button
-              type="button"
-              className={`tool-chip ${selectedTool === 'ner' ? 'active' : ''}`}
-              onClick={() => setSelectedTool('ner')}
-            >
-              🏷 NER
-            </button>
           </div>
 
           {selectedTool === 'explain' && (
@@ -1262,13 +1255,6 @@ function App() {
                                 onClick={() => executeStudyAction('keywords', message.rawContent || message.content, {})}
                               >
                                 🔑 Keywords
-                              </button>
-                              <button
-                                className="followup-btn"
-                                type="button"
-                                onClick={() => executeStudyAction('ner', message.rawContent || message.content, {})}
-                              >
-                                🏷 NER
                               </button>
                             </div>
                           </div>

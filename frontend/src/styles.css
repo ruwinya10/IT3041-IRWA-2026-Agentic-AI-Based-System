@@ -292,11 +292,15 @@ textarea:focus {
 }
 
 .composer-panel.compact {
-  position: sticky;
+  position: fixed;
+  left: 50%;
+  right: auto;
   bottom: 16px;
-  margin-top: 18px;
+  width: min(920px, calc(100% - 32px));
+  transform: translateX(-50%);
+  margin: 0;
   border-radius: 24px;
-  z-index: 8;
+  z-index: 30;
 }
 
 .prompt-shell {
@@ -365,7 +369,7 @@ textarea:focus {
 
 .scroll-bottom-btn {
   position: fixed;
-  bottom: 124px;
+  bottom: 196px;
   left: 50%;
   transform: translateX(-50%);
   width: 36px;
@@ -487,7 +491,7 @@ textarea:focus {
 .chat-view {
   max-width: 920px;
   margin: 0 auto;
-  padding-bottom: 18px;
+  padding-bottom: 220px;
 }
 
 .conversation {

@@ -91,6 +91,7 @@ def search(
     query: str,
     n_results: int = 5,
     document_id: int | None = None,
+    filename: str | None = None,
 ):
     """
     Search uploaded document chunks belonging to a user.
@@ -111,7 +112,7 @@ def search(
 
     # Preserve the original behaviour when no specific
     # document has been selected.
-    if document_id is None:
+    if document_id is None and filename is None:
         where_filter = {
             "user_id": user_id
         }
@@ -119,15 +120,24 @@ def search(
     # When a document ID is available, search only chunks
     # belonging to that user AND that document.
     else:
+        filters = [
+            {
+                "user_id": user_id
+            }
+        ]
+
+        if document_id is not None:
+            filters.append({
+                "document_id": document_id
+            })
+
+        if filename is not None:
+            filters.append({
+                "filename": filename
+            })
+
         where_filter = {
-            "$and": [
-                {
-                    "user_id": user_id
-                },
-                {
-                    "document_id": document_id
-                },
-            ]
+            "$and": filters
         }
 
     # Query ChromaDB.
@@ -161,17 +171,27 @@ def search(
 # FULL DOCUMENT RETRIEVAL
 # ============================================================
 
-def get_document_chunks(user_id: int, document_id: int):
+def get_document_chunks(
+    user_id: int,
+    document_id: int | None = None,
+    filename: str | None = None,
+    limit: int | None = None,
+):
     """
     Retrieve all chunks for a specific document in natural reading order.
     Bypasses fuzzy semantic search.
     """
-    where_filter = {
-        "$and": [
-            {"user_id": user_id},
-            {"document_id": document_id},
-        ]
-    }
+    filters = [
+        {"user_id": user_id},
+    ]
+
+    if document_id is not None:
+        filters.append({"document_id": document_id})
+
+    if filename is not None:
+        filters.append({"filename": filename})
+
+    where_filter = {"$and": filters} if len(filters) > 1 else filters[0]
     
     result = collection.get(where=where_filter)
     docs = result.get("documents", [])
@@ -182,7 +202,22 @@ def get_document_chunks(user_id: int, document_id: int):
     try:
         indexed_docs = [(int(doc_id.split('-')[-1]), doc) for doc_id, doc in zip(ids, docs)]
         indexed_docs.sort(key=lambda x: x[0])
-        return [doc for _, doc in indexed_docs]
+        docs = [doc for _, doc in indexed_docs]
     except Exception:
-        return docs
+        pass
+
+    if limit is not None:
+        docs = docs[:limit]
+
+    return [
+        {
+            "text": document,
+            "metadata": {
+                "user_id": user_id,
+                "document_id": document_id,
+                "filename": filename,
+            },
+        }
+        for document in docs
+    ]
 

@@ -245,35 +245,47 @@ function App() {
   const [file, setFile] = useState(null);
   const [status, setStatus] = useState('');
   const [isAsking, setIsAsking] = useState(false);
-  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
   const messagesEndRef = useRef(null);
+  const latestAssistantRef = useRef(null);
 
   // Study tool modes inside the composer
-  const [selectedTool, setSelectedTool] = useState('chat'); // 'chat' | 'explain' | 'summarize' | 'quiz' | 'flashcards' | 'notes' | 'keywords' | 'ner'
+  const [selectedTool, setSelectedTool] = useState('chat'); // 'chat' | 'explain' | 'summarize' | 'quiz' | 'flashcards' | 'notes' | 'keywords'
   const [explainLevel, setExplainLevel] = useState('Normal'); // 'Simple' | 'Normal' | 'Detailed'
   const [summaryMode, setSummaryMode] = useState('Exam Revision'); // 'Quick Summary' | 'Detailed Summary' | 'Bullet Point Summary' | 'Exam Revision'
   const [quizCount, setQuizCount] = useState(5);
   const [quizDifficulty, setQuizDifficulty] = useState('Medium');
 
-  function scrollToTop(behavior = 'smooth') {
-    window.scrollTo({ top: 0, behavior });
+  function scrollToBottom(behavior = 'smooth') {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' });
+    } else {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+    }
   }
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
-    if (lastMessage && lastMessage.role === 'assistant') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (lastMessage) {
+      if (lastMessage.role === 'assistant') {
+        latestAssistantRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
     }
   }, [messages]);
 
   useEffect(() => {
     function handleScroll() {
       if (messages.length === 0) {
-        setShowScrollTop(false);
+        setShowScrollBottom(false);
         return;
       }
+      const scrollHeight = document.documentElement.scrollHeight;
       const scrollTop = window.scrollY || document.documentElement.scrollTop;
-      setShowScrollTop(scrollTop > 400);
+      const clientHeight = window.innerHeight || document.documentElement.clientHeight;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      setShowScrollBottom(distanceFromBottom > 150);
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -381,7 +393,6 @@ function App() {
       flashcards: 'Flashcards',
       notes: 'Study Notes',
       keywords: 'Keywords (TF-IDF NLP)',
-      ner: 'Named Entity Recognition (spaCy)'
     };
 
     const userMessage = {
@@ -415,6 +426,10 @@ function App() {
           task,
           content: text,
           options: mergedOptions,
+          context: uploadedFile ? {
+            document_id: uploadedFile.document_id,
+            filename: uploadedFile.filename,
+          } : {},
         }),
       });
 
@@ -481,13 +496,11 @@ function App() {
       try {
         uploadedFile = await uploadSelectedFile();
         if (!textToSend) {
-          textToSend = selectedTool === 'summarize'
-            ? `Summarize the uploaded PDF document: ${uploadedFile.filename}`
-            : selectedTool === 'quiz'
-            ? `Generate a practice quiz from the uploaded PDF document: ${uploadedFile.filename}`
-            : selectedTool === 'ner'
-            ? `Extract named entities from the uploaded PDF document: ${uploadedFile.filename}`
-            : `Analyze the uploaded PDF: ${uploadedFile.filename}`;
+          if (selectedTool === 'summarize') textToSend = `Summarize the uploaded PDF document: ${uploadedFile.filename}`;
+          else if (selectedTool === 'quiz') textToSend = `Generate a practice quiz from the uploaded PDF document: ${uploadedFile.filename}`;
+          else if (selectedTool === 'notes') textToSend = `Create structured study notes from the uploaded PDF document: ${uploadedFile.filename}`;
+          else if (selectedTool === 'flashcards') textToSend = `Generate flashcards from the uploaded PDF document: ${uploadedFile.filename}`;
+          else textToSend = `Analyze the uploaded PDF: ${uploadedFile.filename}`;
         } else {
           textToSend = `${textToSend}\n\n[Uploaded Document Context: ${uploadedFile.filename}]`;
         }
@@ -959,11 +972,15 @@ function App() {
             )}
 
             <section className="conversation" aria-live="polite">
-              {[...messages].reverse().map((message, index) => {
+              {messages.map((message, index) => {
+                const isLatestAssistant =
+                  message.role === 'assistant' && index === messages.length - 1;
+
                 return (
                   <article
                     className={`message ${message.role}`}
                     key={message.id}
+                    ref={isLatestAssistant ? latestAssistantRef : null}
                   >
                     <div className="avatar">{message.role === 'user' ? 'You' : 'AI'}</div>
                     <div className="bubble">
@@ -1210,49 +1227,49 @@ function App() {
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('explain', message.rawContent || message.content, { level: 'Simple' })}
+                                onClick={() => executeStudyAction('explain', message.rawContent || message.content, { level: 'Simple' }, message.uploadedFile)}
                               >
                                 💡 Explain simpler
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('explain', message.rawContent || message.content, { level: 'Detailed' })}
+                                onClick={() => executeStudyAction('explain', message.rawContent || message.content, { level: 'Detailed' }, message.uploadedFile)}
                               >
                                 🔍 More detail
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('summarize', message.rawContent || message.content, { mode: 'Exam Revision' })}
+                                onClick={() => executeStudyAction('summarize', message.rawContent || message.content, { mode: 'Exam Revision' }, message.uploadedFile)}
                               >
                                 📝 Exam summary
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('quiz', message.rawContent || message.content, { count: 5, difficulty: 'Medium' })}
+                                onClick={() => executeStudyAction('quiz', message.rawContent || message.content, { count: 5, difficulty: 'Medium' }, message.uploadedFile)}
                               >
                                 ❓ Generate quiz
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('flashcards', message.rawContent || message.content, {})}
+                                onClick={() => executeStudyAction('flashcards', message.rawContent || message.content, {}, message.uploadedFile)}
                               >
                                 🗂 Flashcards
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('notes', message.rawContent || message.content, {})}
+                                onClick={() => executeStudyAction('notes', message.rawContent || message.content, {}, message.uploadedFile)}
                               >
                                 🧠 Study notes
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('keywords', message.rawContent || message.content, {})}
+                                onClick={() => executeStudyAction('keywords', message.rawContent || message.content, {}, message.uploadedFile)}
                               >
                                 🔑 Keywords
                               </button>
@@ -1267,17 +1284,17 @@ function App() {
               <div ref={messagesEndRef} />
             </section>
 
-            {showScrollTop && (
+            {showScrollBottom && (
               <button
                 type="button"
                 className="scroll-bottom-btn"
-                onClick={() => scrollToTop('smooth')}
-                aria-label="Scroll to top"
-                title="Scroll to top"
+                onClick={() => scrollToBottom('smooth')}
+                aria-label="Scroll to latest answer"
+                title="Scroll to latest answer"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="19" x2="12" y2="5" />
-                  <polyline points="5 12 12 5 19 12" />
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <polyline points="19 12 12 19 5 12" />
                 </svg>
               </button>
             )}

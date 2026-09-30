@@ -3,10 +3,11 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import json
 import logging
+import re
 
 from app.core.llm import chat
 from app.nlp.summarizer import extractive_summary
-from app.rag.vector_store import search
+from app.rag.vector_store import search, get_document_chunks
 from app.nlp.processor import extract_keywords, extract_entities
 
 app = FastAPI(title="Study/NLP Agent")
@@ -49,13 +50,20 @@ def study(req: StudyRequest):
     # summarization should NOT depend on OpenAlex.
     # ---------------------------------------------------------
 
-    if req.intent in ["SUMMARIZATION", "DOCUMENT_QA"]:
+    if req.intent in ["SUMMARIZATION", "DOCUMENT_QA", "QUIZ_GENERATION"]:
+        pdf_match = re.search(r'([\w\-\.]+\.pdf)', req.question, re.IGNORECASE)
+        filename = pdf_match.group(1).replace(" ", "_") if pdf_match else None
 
-        local_context = search(
-            req.user_id,
-            req.question,
-            8
-        )
+        if req.intent == "SUMMARIZATION" and filename:
+            local_context = get_document_chunks(user_id=req.user_id, filename=filename, limit=15)
+        elif filename:
+            local_context = search(req.user_id, req.question, 8, filename=filename)
+        else:
+            local_context = search(
+                req.user_id,
+                req.question,
+                8
+            )
 
     # ---------------------------------------------------------
     # STEP 3 — Prepare uploaded-document context
@@ -367,16 +375,43 @@ def process_study_task(req: StudyTaskRequest):
         # or if user_id is provided, retrieve relevant text from Chroma
         # ---------------------------------------------------------
         user_id = context.get("user_id")
+        doc_id = context.get("document_id")
+        filename = context.get("filename")
+
+        # If filename not in context, check if a .pdf filename is mentioned in content
+        if not filename:
+            pdf_match = re.search(r'([\w\-\.]+\.pdf)', content, re.IGNORECASE)
+            if pdf_match:
+                filename = pdf_match.group(1).replace(" ", "_")
+
         doc_words = ["uploaded", "document", "pdf", "file", "lecture", "slides"]
-        is_doc_query = any(w in content.lower() for w in doc_words) or len(content.strip()) < 80
+        is_doc_query = any(w in content.lower() for w in doc_words) or len(content.strip()) < 80 or bool(filename or doc_id)
 
         if user_id and is_doc_query:
             try:
-                retrieved_chunks = search(user_id, content, 6)
+                # For document-wide tasks (summarize, quiz, notes, flashcards),
+                # get the natural sequential chunks of that exact document!
+                if task in ["summarize", "quiz", "notes", "flashcards"]:
+                    retrieved_chunks = get_document_chunks(
+                        user_id=user_id,
+                        filename=filename,
+                        document_id=doc_id,
+                        limit=15
+                    )
+                else:
+                    retrieved_chunks = search(
+                        user_id=user_id,
+                        query=content,
+                        n_results=6,
+                        filename=filename,
+                        document_id=doc_id
+                    )
+
                 if retrieved_chunks:
                     doc_context = "\n\n".join(c.get("text", "") for c in retrieved_chunks if c.get("text"))
                     if doc_context.strip():
-                        content = f"{content}\n\n[Uploaded Document Content]:\n{doc_context}"
+                        target_label = filename or (f"Document #{doc_id}" if doc_id else "Uploaded PDF")
+                        content = f"{content}\n\n[Uploaded Document Content ({target_label})]:\n{doc_context}"
             except Exception as e:
                 logging.warning(f"Chroma retrieval failed in study agent: {e}")
 

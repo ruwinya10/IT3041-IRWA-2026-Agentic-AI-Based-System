@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import logo from './assets/researchmind-logo.png';
+import ResearchSources from './ResearchSources';
 import './styles.css';
+import ThemeToggle from './ThemeToggle';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const QUICK_TOPICS = [
@@ -846,6 +848,7 @@ function App() {
     return (
       <div className="auth">
         <section className="auth-panel">
+          <ThemeToggle />
           <img className="brand-logo" src={logo} alt="ResearchMind logo" />
           <p className="eyebrow">Multi-agent academic assistant</p>
           <h1>ResearchMind</h1>
@@ -923,6 +926,7 @@ function App() {
           </div>
         </div>
         <div className="topbar-actions">
+          <ThemeToggle />
           {messages.length > 0 && (
             <button className="ghost-button" type="button" onClick={startNewChat}>
               New chat
@@ -985,12 +989,13 @@ function App() {
                     <div className="avatar">{message.role === 'user' ? 'You' : 'AI'}</div>
                     <div className="bubble">
                       {message.loading ? (
-                        <div className="typing">
-                          <span />
-                          <span />
-                          <span />
-                        </div>
-                      ) : message.error ? (
+                            <div className="typing">
+                              <span />
+                              <span />
+                              <span />
+                            </div>
+                          ) : message.error ? (
+                          
                         <p className="error-text">{message.error}</p>
                       ) : message.role === 'user' ? (
                         <>
@@ -1192,7 +1197,9 @@ function App() {
                             </div>
                           ) : (
                             <div className="answer">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {message.content}
+                              </ReactMarkdown>
                             </div>
                           )}
 
@@ -1202,17 +1209,21 @@ function App() {
                                 <span>Verification</span>
                                 <strong>{verificationLabel(message.verification)}</strong>
                               </div>
+
                               <div className="verification-score">
                                 {verificationScore(message.verification)}%
                               </div>
+
                               <p>
                                 Confidence: <b>{message.verification.confidence || 'unknown'}</b>
                                 {typeof message.verification.evidence_count === 'number'
                                   ? ` • Evidence checked: ${message.verification.evidence_count}`
                                   : ''}
                               </p>
+
                               <div className="verification-details">
                                 <p>{verificationSummary(message.verification)}</p>
+
                                 {message.verification.issues?.length ? (
                                   <div>
                                     <span>Areas to improve</span>
@@ -1223,6 +1234,7 @@ function App() {
                                     </ul>
                                   </div>
                                 ) : null}
+
                                 {message.verification.corrections?.length ? (
                                   <div>
                                     <span>Suggested fixes</span>
@@ -1237,24 +1249,9 @@ function App() {
                             </div>
                           )}
 
-                          {message.sources?.length ? (
-                            <details className="evidence-drawer">
-                              <summary>Sources</summary>
-                              {message.sources.map((s, i) => (
-                                <div className="source" key={`${s.title}-${i}`}>
-                                  <b>{s.title}</b> ({s.year || 'n.d.'})
-                                  <br />
-                                  {s.doi || s.url ? (
-                                    <a href={s.doi || s.url} target="_blank" rel="noopener noreferrer">
-                                      {s.doi || s.url}
-                                    </a>
-                                  ) : (
-                                    <span>No DOI/URL returned</span>
-                                  )}
-                                </div>
-                              ))}
-                            </details>
-                          ) : null}
+                          <ResearchSources sources={message.sources} />
+
+                          
 
                           {/* Quick Follow-up Study Actions */}
                           <div className="followup-bar">

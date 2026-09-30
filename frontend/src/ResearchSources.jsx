@@ -1,4 +1,5 @@
 function getPaperUrl(source) {
+
   // 1. Prefer the best access URL selected by the Research Agent
   if (source.best_access_url) {
     return source.best_access_url;
@@ -38,20 +39,50 @@ function getPaperUrl(source) {
 }
 
 export default function ResearchSources({ sources }) {
+
   if (!sources?.length) {
     return null;
   }
 
   return (
     <details className="evidence-drawer">
+
       <summary>Sources</summary>
 
       {sources.map((source, index) => {
+
         const paperUrl = getPaperUrl(source);
 
         return (
-          <div className="source" key={`${source.title}-${index}`}>
+          <div
+            className="source"
+            key={`${source.title}-${index}`}
+          >
+
             <b>{source.title}</b> ({source.year || 'n.d.'})
+
+            {/* Relevance information */}
+            {source.relevance_score !== undefined && (
+              <>
+                <br />
+                <small>
+                  Relevance Score: <b>{source.relevance_score}/100</b>
+                  {' '}•{' '}
+                  Relevance: <b>{source.relevance_level || 'N/A'}</b>
+                </small>
+              </>
+            )}
+
+            {/* Ranking information */}
+            {source.rank !== undefined && (
+              <>
+                <small>
+                  {' '}•{' '}
+                  Rank: <b>#{source.rank}</b>
+                </small>
+              </>
+            )}
+
             <br />
 
             {paperUrl ? (
@@ -72,9 +103,11 @@ export default function ResearchSources({ sources }) {
                 <small>DOI: {source.doi}</small>
               </>
             )}
+
           </div>
         );
       })}
+
     </details>
   );
 }

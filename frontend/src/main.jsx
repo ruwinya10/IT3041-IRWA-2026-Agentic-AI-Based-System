@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import logo from './assets/researchmind-logo.png';
+import ResearchSources from './ResearchSources';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -973,6 +974,22 @@ function App() {
                           <span />
                           <span />
                         </div>
+
+
+                        {message.verification && (
+                          <div className="verification-card">
+                            <div>
+                              <span>Verification</span>
+                              <strong>{verificationLabel(message.verification)}</strong>
+                            </div>
+                            <div className="verification-score">
+                              {verificationScore(message.verification)}%
+                            </div>
+                            <p>
+                              Confidence: <b>{message.verification.confidence || 'unknown'}</b>
+                              {typeof message.verification.evidence_count === 'number'
+                                ? ` • Evidence checked: ${message.verification.evidence_count}`
+                                : ''}
                       ) : message.error ? (
                         <p className="error-text">{message.error}</p>
                       ) : message.role === 'user' ? (
@@ -1139,7 +1156,9 @@ function App() {
                             </div>
                           ) : (
                             <div className="answer">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {message.content}
+                              </ReactMarkdown>
                             </div>
                           )}
 
@@ -1149,17 +1168,21 @@ function App() {
                                 <span>Verification</span>
                                 <strong>{verificationLabel(message.verification)}</strong>
                               </div>
+
                               <div className="verification-score">
                                 {verificationScore(message.verification)}%
                               </div>
+
                               <p>
                                 Confidence: <b>{message.verification.confidence || 'unknown'}</b>
                                 {typeof message.verification.evidence_count === 'number'
                                   ? ` • Evidence checked: ${message.verification.evidence_count}`
                                   : ''}
                               </p>
+
                               <div className="verification-details">
                                 <p>{verificationSummary(message.verification)}</p>
+
                                 {message.verification.issues?.length ? (
                                   <div>
                                     <span>Areas to improve</span>
@@ -1170,6 +1193,7 @@ function App() {
                                     </ul>
                                   </div>
                                 ) : null}
+
                                 {message.verification.corrections?.length ? (
                                   <div>
                                     <span>Suggested fixes</span>
@@ -1183,6 +1207,8 @@ function App() {
                               </div>
                             </div>
                           )}
+
+                          <ResearchSources sources={message.sources} />
 
                           {message.sources?.length ? (
                             <details className="evidence-drawer">

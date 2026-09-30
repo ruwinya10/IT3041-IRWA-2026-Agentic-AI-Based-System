@@ -19,10 +19,24 @@ const QUICK_TOPICS = [
 
 function verificationScore(verification) {
   if (!verification) return null;
-  if (verification.supported) return 90;
-  if (verification.confidence === 'high') return 80;
-  if (verification.confidence === 'medium') return 60;
-  if (verification.confidence === 'low') return 35;
+  const verdict = (verification.verdict || '').toLowerCase();
+  const confidence = verification.confidence || 'unknown';
+
+  if (verification.supported) {
+    if (confidence === 'high') return 90;
+    if (confidence === 'medium') return 80;
+    return 70;
+  }
+
+  if (verdict.includes('partial')) {
+    if (confidence === 'high') return 70;
+    if (confidence === 'medium') return 60;
+    return 50;
+  }
+
+  if (confidence === 'high') return 45;
+  if (confidence === 'medium') return 40;
+  if (confidence === 'low') return 35;
   return 20;
 }
 
@@ -609,6 +623,40 @@ function App() {
     executeStudyAction(task, message.rawContent || message.content, options);
   }
 
+  function latestResearchContext() {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (message.role === 'assistant' && message.sources?.length) {
+        return message;
+      }
+    }
+    return null;
+  }
+
+  function shouldKeepResearchContext(text) {
+    const q = text.toLowerCase();
+    const followupPhrases = [
+      'more',
+      'explain',
+      'details',
+      'summarize',
+      'summary',
+      'compare',
+      'which',
+      'why',
+      'how',
+      'these',
+      'those',
+      'them',
+      'above',
+      'papers',
+      'sources',
+      'research',
+    ];
+
+    return followupPhrases.some((phrase) => q.includes(phrase));
+  }
+
   async function ask() {
     const submittedQuestion = question.trim();
     if ((!submittedQuestion && !file) || isAsking) return;
@@ -648,11 +696,14 @@ function App() {
       setIsAsking(false);
     }
 
-    // If a study tool is selected without a PDF, route directly via Study/NLP Agent.
-    // Uploaded-PDF tasks go through Coordinator so retrieved document evidence can
-    // be passed to Verification Agent.
-    if (selectedTool !== 'chat' && !uploadedFile) {
-      const toolToRun = selectedTool;
+    // Uploaded-PDF requests route through Study/NLP Agent so PDF answers keep working
+    // even when the Coordinator chat route is unavailable for document QA.
+    if (selectedTool !== 'chat' || uploadedFile) {
+      const toolToRun = selectedTool !== 'chat'
+        ? selectedTool
+        : textToSend.toLowerCase().includes('summar')
+        ? 'summarize'
+        : 'explain';
       setQuestion('');
       executeStudyAction(toolToRun, textToSend, {}, uploadedFile);
       return;
@@ -676,6 +727,23 @@ function App() {
       let apiQuestion = textToSend;
       if (uploadedFile) {
         apiQuestion = `${textToSend}\n\nUse the uploaded PDF/document as the source. Uploaded file: ${uploadedFile.filename}.`;
+      } else if (selectedTool === 'chat') {
+        const previousResearch = latestResearchContext();
+        if (previousResearch && shouldKeepResearchContext(textToSend)) {
+          const sourceTitles = previousResearch.sources
+            .slice(0, 5)
+            .map((source) => source.title)
+            .filter(Boolean)
+            .join('; ');
+          apiQuestion = [
+            `Research follow-up request: ${textToSend}`,
+            '',
+            `Previous research answer: ${previousResearch.rawContent || previousResearch.content || ''}`,
+            sourceTitles ? `Previously retrieved research sources: ${sourceTitles}` : '',
+            '',
+            'Continue using academic research evidence and include verification.'
+          ].filter(Boolean).join('\n');
+        }
       }
 
       setStatus('Coordinator is choosing the best agent route...');
@@ -1103,8 +1171,6 @@ function App() {
           </section>
         ) : (
           <section className="chat-view">
-            {renderComposer(true)}
-            
             {hasGeneratedAnswer && (
               <p className="ai-disclaimer" style={{ marginBottom: '20px' }}>
                 AI can make mistakes. Please verify important information using reliable sources.
@@ -1494,6 +1560,8 @@ function App() {
               })}
               <div ref={messagesEndRef} />
             </section>
+
+            {renderComposer(true)}
 
             {showScrollBottom && (
               <button

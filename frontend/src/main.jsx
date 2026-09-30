@@ -1141,16 +1141,52 @@ function App() {
                               {message.studyTask === 'notes' && (
                                 <div>
                                   <div className="study-badge">Structured Study Notes</div>
-                                  {Object.entries(message.studyData.notes || {}).map(([sec, val], i) => (
-                                    <div key={i} className="exp-section" style={{ marginTop: '10px' }}>
-                                      <h4>{sec}</h4>
-                                      {Array.isArray(val) ? (
-                                        <ul>{val.map((item, j) => <li key={j}>{item}</li>)}</ul>
-                                      ) : (
-                                        <p>{val}</p>
-                                      )}
+                                  {typeof message.studyData.notes === 'string' ? (
+                                    <div className="answer" style={{ marginTop: '10px' }}>
+                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.studyData.notes}</ReactMarkdown>
                                     </div>
-                                  ))}
+                                  ) : (
+                                    Object.entries(message.studyData.notes || {}).map(([sec, val], i) => {
+                                      const renderVal = (v) => {
+                                        if (v === null || v === undefined) return null;
+                                        if (Array.isArray(v)) {
+                                          return (
+                                            <ul style={{ margin: '6px 0', paddingLeft: '20px' }}>
+                                              {v.map((item, j) => (
+                                                <li key={j} style={{ margin: '4px 0' }}>
+                                                  {typeof item === 'object' && item !== null ? renderVal(item) : String(item)}
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          );
+                                        }
+                                        if (typeof v === 'object') {
+                                          return (
+                                            <div style={{ marginLeft: '12px', marginTop: '6px' }}>
+                                              {Object.entries(v).map(([subK, subV], j) => (
+                                                <div key={j} style={{ margin: '6px 0' }}>
+                                                  <strong>{subK}: </strong>
+                                                  {typeof subV === 'object' && subV !== null ? (
+                                                    renderVal(subV)
+                                                  ) : (
+                                                    <span>{String(subV)}</span>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          );
+                                        }
+                                        return <p style={{ margin: '6px 0' }}>{String(v)}</p>;
+                                      };
+
+                                      return (
+                                        <div key={i} className="exp-section" style={{ marginTop: '12px' }}>
+                                          <h4>{sec}</h4>
+                                          {renderVal(val)}
+                                        </div>
+                                      );
+                                    })
+                                  )}
                                 </div>
                               )}
                             </div>

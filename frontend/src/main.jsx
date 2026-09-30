@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import logo from './assets/researchmind-logo.png';
 import ResearchSources from './ResearchSources';
 import './styles.css';
+import ThemeToggle from './ThemeToggle';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const QUICK_TOPICS = [
@@ -834,6 +835,7 @@ function App() {
     return (
       <div className="auth">
         <section className="auth-panel">
+          <ThemeToggle />
           <img className="brand-logo" src={logo} alt="ResearchMind logo" />
           <p className="eyebrow">Multi-agent academic assistant</p>
           <h1>ResearchMind</h1>
@@ -911,6 +913,7 @@ function App() {
           </div>
         </div>
         <div className="topbar-actions">
+          <ThemeToggle />
           {messages.length > 0 && (
             <button className="ghost-button" type="button" onClick={startNewChat}>
               New chat

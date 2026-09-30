@@ -252,35 +252,47 @@ function App() {
   const [file, setFile] = useState(null);
   const [status, setStatus] = useState('');
   const [isAsking, setIsAsking] = useState(false);
-  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
   const messagesEndRef = useRef(null);
+  const latestAssistantRef = useRef(null);
 
   // Study tool modes inside the composer
-  const [selectedTool, setSelectedTool] = useState('chat'); // 'chat' | 'explain' | 'summarize' | 'quiz' | 'flashcards' | 'notes' | 'keywords' | 'ner'
+  const [selectedTool, setSelectedTool] = useState('chat'); // 'chat' | 'explain' | 'summarize' | 'quiz' | 'flashcards' | 'notes' | 'keywords'
   const [explainLevel, setExplainLevel] = useState('Normal'); // 'Simple' | 'Normal' | 'Detailed'
   const [summaryMode, setSummaryMode] = useState('Exam Revision'); // 'Quick Summary' | 'Detailed Summary' | 'Bullet Point Summary' | 'Exam Revision'
   const [quizCount, setQuizCount] = useState(5);
   const [quizDifficulty, setQuizDifficulty] = useState('Medium');
 
-  function scrollToTop(behavior = 'smooth') {
-    window.scrollTo({ top: 0, behavior });
+  function scrollToBottom(behavior = 'smooth') {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' });
+    } else {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+    }
   }
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
-    if (lastMessage && lastMessage.role === 'assistant') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (lastMessage) {
+      if (lastMessage.role === 'assistant') {
+        latestAssistantRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
     }
   }, [messages]);
 
   useEffect(() => {
     function handleScroll() {
       if (messages.length === 0) {
-        setShowScrollTop(false);
+        setShowScrollBottom(false);
         return;
       }
+      const scrollHeight = document.documentElement.scrollHeight;
       const scrollTop = window.scrollY || document.documentElement.scrollTop;
-      setShowScrollTop(scrollTop > 400);
+      const clientHeight = window.innerHeight || document.documentElement.clientHeight;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      setShowScrollBottom(distanceFromBottom > 150);
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -392,7 +404,6 @@ function App() {
       flashcards: 'Flashcards',
       notes: 'Study Notes',
       keywords: 'Keywords (TF-IDF NLP)',
-      ner: 'Named Entity Recognition (spaCy)'
     };
 
     const userMessage = {
@@ -426,6 +437,10 @@ function App() {
           task,
           content: text,
           options: mergedOptions,
+          context: uploadedFile ? {
+            document_id: uploadedFile.document_id,
+            filename: uploadedFile.filename,
+          } : {},
         }),
       });
 
@@ -1097,11 +1112,15 @@ function App() {
             )}
 
             <section className="conversation" aria-live="polite">
-              {[...messages].reverse().map((message, index) => {
+              {messages.map((message, index) => {
+                const isLatestAssistant =
+                  message.role === 'assistant' && index === messages.length - 1;
+
                 return (
                   <article
                     className={`message ${message.role}`}
                     key={message.id}
+                    ref={isLatestAssistant ? latestAssistantRef : null}
                   >
                     <div className="avatar">{message.role === 'user' ? 'You' : 'AI'}</div>
                     <div className="bubble">
@@ -1263,16 +1282,52 @@ function App() {
                               {message.studyTask === 'notes' && (
                                 <div>
                                   <div className="study-badge">Structured Study Notes</div>
-                                  {Object.entries(message.studyData.notes || {}).map(([sec, val], i) => (
-                                    <div key={i} className="exp-section" style={{ marginTop: '10px' }}>
-                                      <h4>{sec}</h4>
-                                      {Array.isArray(val) ? (
-                                        <ul>{val.map((item, j) => <li key={j}>{item}</li>)}</ul>
-                                      ) : (
-                                        <p>{val}</p>
-                                      )}
+                                  {typeof message.studyData.notes === 'string' ? (
+                                    <div className="answer" style={{ marginTop: '10px' }}>
+                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.studyData.notes}</ReactMarkdown>
                                     </div>
-                                  ))}
+                                  ) : (
+                                    Object.entries(message.studyData.notes || {}).map(([sec, val], i) => {
+                                      const renderVal = (v) => {
+                                        if (v === null || v === undefined) return null;
+                                        if (Array.isArray(v)) {
+                                          return (
+                                            <ul style={{ margin: '6px 0', paddingLeft: '20px' }}>
+                                              {v.map((item, j) => (
+                                                <li key={j} style={{ margin: '4px 0' }}>
+                                                  {typeof item === 'object' && item !== null ? renderVal(item) : String(item)}
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          );
+                                        }
+                                        if (typeof v === 'object') {
+                                          return (
+                                            <div style={{ marginLeft: '12px', marginTop: '6px' }}>
+                                              {Object.entries(v).map(([subK, subV], j) => (
+                                                <div key={j} style={{ margin: '6px 0' }}>
+                                                  <strong>{subK}: </strong>
+                                                  {typeof subV === 'object' && subV !== null ? (
+                                                    renderVal(subV)
+                                                  ) : (
+                                                    <span>{String(subV)}</span>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          );
+                                        }
+                                        return <p style={{ margin: '6px 0' }}>{String(v)}</p>;
+                                      };
+
+                                      return (
+                                        <div key={i} className="exp-section" style={{ marginTop: '12px' }}>
+                                          <h4>{sec}</h4>
+                                          {renderVal(val)}
+                                        </div>
+                                      );
+                                    })
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1440,17 +1495,17 @@ function App() {
               <div ref={messagesEndRef} />
             </section>
 
-            {showScrollTop && (
+            {showScrollBottom && (
               <button
                 type="button"
                 className="scroll-bottom-btn"
-                onClick={() => scrollToTop('smooth')}
-                aria-label="Scroll to top"
-                title="Scroll to top"
+                onClick={() => scrollToBottom('smooth')}
+                aria-label="Scroll to latest answer"
+                title="Scroll to latest answer"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="19" x2="12" y2="5" />
-                  <polyline points="5 12 12 5 19 12" />
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <polyline points="19 12 12 19 5 12" />
                 </svg>
               </button>
             )}

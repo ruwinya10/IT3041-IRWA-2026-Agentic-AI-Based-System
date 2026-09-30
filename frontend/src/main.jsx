@@ -969,28 +969,13 @@ function App() {
                     <div className="avatar">{message.role === 'user' ? 'You' : 'AI'}</div>
                     <div className="bubble">
                       {message.loading ? (
-                        <div className="typing">
-                          <span />
-                          <span />
-                          <span />
-                        </div>
-
-
-                        {message.verification && (
-                          <div className="verification-card">
-                            <div>
-                              <span>Verification</span>
-                              <strong>{verificationLabel(message.verification)}</strong>
+                            <div className="typing">
+                              <span />
+                              <span />
+                              <span />
                             </div>
-                            <div className="verification-score">
-                              {verificationScore(message.verification)}%
-                            </div>
-                            <p>
-                              Confidence: <b>{message.verification.confidence || 'unknown'}</b>
-                              {typeof message.verification.evidence_count === 'number'
-                                ? ` • Evidence checked: ${message.verification.evidence_count}`
-                                : ''}
-                      ) : message.error ? (
+                          ) : message.error ? (
+                          
                         <p className="error-text">{message.error}</p>
                       ) : message.role === 'user' ? (
                         <>
@@ -1210,24 +1195,7 @@ function App() {
 
                           <ResearchSources sources={message.sources} />
 
-                          {message.sources?.length ? (
-                            <details className="evidence-drawer">
-                              <summary>Sources</summary>
-                              {message.sources.map((s, i) => (
-                                <div className="source" key={`${s.title}-${i}`}>
-                                  <b>{s.title}</b> ({s.year || 'n.d.'})
-                                  <br />
-                                  {s.doi || s.url ? (
-                                    <a href={s.doi || s.url} target="_blank" rel="noopener noreferrer">
-                                      {s.doi || s.url}
-                                    </a>
-                                  ) : (
-                                    <span>No DOI/URL returned</span>
-                                  )}
-                                </div>
-                              ))}
-                            </details>
-                          ) : null}
+                          
 
                           {/* Quick Follow-up Study Actions */}
                           <div className="followup-bar">

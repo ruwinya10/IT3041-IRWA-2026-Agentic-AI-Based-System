@@ -84,10 +84,20 @@ def study(req: StudyRequest):
     # STEP 4 — Prepare external research context
     # ---------------------------------------------------------
 
-    paper_text = "\n".join(
-        f"- {p.get('title')} "
-        f"({p.get('year')}) "
-        f"DOI: {p.get('doi')}"
+    paper_text = "\n\n".join(
+        "\n".join(
+            item
+            for item in [
+                f"- {p.get('title')} ({p.get('year')})",
+                f"DOI/URL: {p.get('doi') or p.get('url') or p.get('best_access_url') or 'not available'}",
+                f"Abstract/details: {p.get('abstract')}" if p.get("abstract") else "",
+                f"Selection evidence: {p.get('selection_explanation')}" if p.get("selection_explanation") else "",
+                f"Ranking evidence: {p.get('ranking_explanation')}" if p.get("ranking_explanation") else "",
+                f"Matched phrases: {', '.join(p.get('matched_phrases') or p.get('matched_topic_phrases') or [])}"
+                if (p.get("matched_phrases") or p.get("matched_topic_phrases")) else "",
+            ]
+            if item
+        )
         for p in papers
     )
 
@@ -152,6 +162,12 @@ research-related question.
 Clearly distinguish retrieved research information from general
 explanation.
 
+For each paper, summarize only what is supported by the retrieved
+title, abstract, relevance metadata, and selection/ranking evidence.
+
+If only title/abstract metadata is available, say that the full paper
+findings were not reviewed.
+
 Do not invent citations or research findings.
 """
 
@@ -164,6 +180,10 @@ Compare findings where appropriate.
 
 Do not claim that a paper says something unless the retrieved
 information supports the claim.
+
+If abstracts or metadata are the only available evidence, frame the
+answer as an abstract-level comparison rather than confirmed full-paper
+findings.
 
 Do not invent citations or research findings.
 """

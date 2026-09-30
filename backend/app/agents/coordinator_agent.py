@@ -540,6 +540,10 @@ async def ask(req: AskRequest):
             verification = None
 
             if "verification" in intent_result.route:
+                verification_research = {
+                    **research,
+                    **(study.get("verification_context") or {})
+                }
 
                 verification = await call_agent(
                     client,
@@ -547,7 +551,7 @@ async def ask(req: AskRequest):
                     {
                         "question": req.question,
                         "answer": study["answer"],
-                        "research": research
+                        "research": verification_research
                     }
                 )
 

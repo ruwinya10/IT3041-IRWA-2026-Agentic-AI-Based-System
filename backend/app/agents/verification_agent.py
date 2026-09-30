@@ -98,12 +98,44 @@ def build_evidence(research: dict):
     for paper in research.get("papers", []):
         title = paper.get("title") or "Untitled paper"
         year = paper.get("year") or "n.d."
-        doi = paper.get("doi") or paper.get("url") or "no DOI/URL"
+        doi = paper.get("doi") or paper.get("url") or paper.get("best_access_url") or "no DOI/URL"
         abstract = paper.get("abstract") or paper.get("summary") or ""
-        evidence.append(
-            f"Academic source: {title} ({year}), DOI/URL: {doi}\n"
-            f"Available details: {abstract}"
+        selection_explanation = paper.get("selection_explanation") or ""
+        ranking_explanation = paper.get("ranking_explanation") or ""
+        relevance_level = paper.get("relevance_level") or ""
+        relevance_score = paper.get("relevance_score")
+        access_info = paper.get("access_info") or {}
+        access_type = paper.get("access_type") or access_info.get("access_type") or ""
+        matched_keywords = ", ".join(paper.get("matched_keywords") or [])
+        matched_phrases = ", ".join(
+            paper.get("matched_phrases")
+            or paper.get("matched_topic_phrases")
+            or []
         )
+
+        details = [
+            f"Academic source: {title} ({year}), DOI/URL: {doi}",
+        ]
+
+        if abstract:
+            details.append(f"Abstract/details: {abstract}")
+        if selection_explanation:
+            details.append(f"Why this source was selected: {selection_explanation}")
+        if ranking_explanation:
+            details.append(f"Ranking/relevance explanation: {ranking_explanation}")
+        if relevance_level or relevance_score is not None:
+            details.append(
+                f"Retrieval relevance: {relevance_level or 'unknown'}"
+                f"{f' ({relevance_score})' if relevance_score is not None else ''}"
+            )
+        if matched_keywords:
+            details.append(f"Matched keywords: {matched_keywords}")
+        if matched_phrases:
+            details.append(f"Matched phrases: {matched_phrases}")
+        if access_type:
+            details.append(f"Access type: {access_type}")
+
+        evidence.append("\n".join(details))
 
     for item in research.get("local_context", []):
         text = (item.get("text") or "").strip()
@@ -176,7 +208,12 @@ Verification task:
 2. Check whether each claim is supported by the retrieved evidence.
 3. Mark supported=true only if the important claims are materially supported.
 4. Do not treat a title, DOI, or filename alone as evidence for a detailed claim.
-5. If evidence is incomplete, say so clearly in issues and corrections.
+5. For paper-listing, ranking, or recommendation answers, retrieved paper metadata,
+   abstracts, relevance scores, matched keywords/phrases, and selection/ranking
+   explanations ARE valid evidence that the paper was retrieved and is relevant.
+6. Do not require full-text evidence unless the answer claims specific findings,
+   experiments, numerical results, or author conclusions.
+7. If evidence is incomplete, say so clearly in issues and corrections.
 
 Return ONLY valid JSON using exactly this shape:
 {{

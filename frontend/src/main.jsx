@@ -42,6 +42,11 @@ function verificationSummary(verification) {
   return 'More supporting evidence is needed before this answer can be treated as verified.';
 }
 
+function shouldShowVerification(verification) {
+  if (!verification) return false;
+  return verification.evidence_count !== 0;
+}
+
 /* ============================================================
    Interactive Study Widgets
    ============================================================ */
@@ -301,24 +306,28 @@ function App() {
 
     const errors = {};
     const trimmedName = name.trim();
-    const trimmedEmail = email.trim();
+    const trimmedEmail = email.trim().toLowerCase();
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const namePattern = /^[A-Za-z][A-Za-z .'-]{1,148}$/;
+    const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,72}$/;
 
-    if (mode === 'register' && trimmedName.length < 2) {
-      errors.name = 'Enter your full name.';
+    if (mode === 'register' && !namePattern.test(trimmedName)) {
+      errors.name = 'Enter a valid full name.';
     }
 
     if (!trimmedEmail) {
       errors.email = 'Enter your email address.';
     } else if (!emailPattern.test(trimmedEmail)) {
       errors.email = 'Enter a valid email address.';
+    } else if (mode === 'register' && !trimmedEmail.endsWith('@gmail.com')) {
+      errors.email = 'Use a valid Gmail address.';
     }
 
     if (!password) {
       errors.password = 'Enter your password.';
-    } else if (password.length < 8) {
-      errors.password = 'Password must be at least 8 characters.';
-    } else if (password.length > 72) {
+    } else if (mode === 'register' && !strongPasswordPattern.test(password)) {
+      errors.password = 'Use 8-72 characters with uppercase, lowercase, number, and special character.';
+    } else if (mode === 'login' && password.length > 72) {
       errors.password = 'Password must be 72 characters or fewer.';
     }
 
@@ -485,6 +494,121 @@ function App() {
     }
   }
 
+  async function executeVerifiedResearchFollowup(label, instruction, baseMessage) {
+    const baseAnswer = (baseMessage.rawContent || baseMessage.content || '').trim();
+    if (!baseAnswer || isAsking) return;
+
+    const userMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: label,
+      attachedFileName: baseMessage.uploadedFile?.filename || '',
+    };
+    const pendingMessage = { id: crypto.randomUUID(), role: 'assistant', loading: true };
+
+    setMessages((current) => [...current, userMessage, pendingMessage]);
+    setIsAsking(true);
+    setStatus('Coordinator is retrieving research evidence and verification...');
+
+    try {
+      const sourceTitles = (baseMessage.sources || [])
+        .slice(0, 5)
+        .map((source) => source.title)
+        .filter(Boolean)
+        .join('; ');
+      const followupQuestion = [
+        `Research follow-up request: ${instruction}`,
+        '',
+        `Previous answer: ${baseAnswer}`,
+        sourceTitles ? `Previously retrieved research sources: ${sourceTitles}` : '',
+        '',
+        'Use academic research evidence and include verification.'
+      ].filter(Boolean).join('\n');
+
+      const r = await fetch(API + '/api/chat/ask', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
+        body: JSON.stringify({ question: followupQuestion }),
+      });
+
+      const d = await r.json();
+
+      if (!r.ok) {
+        if (r.status === 401 || d.detail === 'Invalid or expired token') {
+          handleAuthExpired();
+          return;
+        }
+
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === pendingMessage.id
+              ? { ...message, loading: false, error: d.detail || 'Request failed' }
+              : message
+          )
+        );
+        setStatus(d.detail || 'Request failed');
+        return;
+      }
+
+      const routeText = (d.route || [])
+        .map((agent) => {
+          const names = {
+            coordinator: 'Coordinator',
+            research: 'Research',
+            study: 'Study/NLP',
+            verification: 'Verification',
+          };
+
+          return names[agent] || agent;
+        })
+        .join(' -> ');
+
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === pendingMessage.id
+            ? {
+                ...message,
+                loading: false,
+                content: d.answer,
+                rawContent: d.answer,
+                sources: d.sources || [],
+                verification: d.verification,
+                route: routeText,
+                uploadedFile: baseMessage.uploadedFile,
+              }
+            : message
+        )
+      );
+      setStatus('Completed.');
+    } catch (error) {
+      console.error(error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unable to run verified research follow-up.';
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === pendingMessage.id
+            ? { ...item, loading: false, error: errorMessage }
+            : item
+        )
+      );
+      setStatus(errorMessage);
+    } finally {
+      setIsAsking(false);
+    }
+  }
+
+  function runFollowup(message, task, label, instruction, options = {}) {
+    if (message.sources?.length) {
+      executeVerifiedResearchFollowup(label, instruction, message);
+      return;
+    }
+
+    executeStudyAction(task, message.rawContent || message.content, options);
+  }
+
   async function ask() {
     const submittedQuestion = question.trim();
     if ((!submittedQuestion && !file) || isAsking) return;
@@ -498,11 +622,21 @@ function App() {
       try {
         uploadedFile = await uploadSelectedFile();
         if (!textToSend) {
-          if (selectedTool === 'summarize') textToSend = `Summarize the uploaded PDF document: ${uploadedFile.filename}`;
-          else if (selectedTool === 'quiz') textToSend = `Generate a practice quiz from the uploaded PDF document: ${uploadedFile.filename}`;
-          else if (selectedTool === 'notes') textToSend = `Create structured study notes from the uploaded PDF document: ${uploadedFile.filename}`;
-          else if (selectedTool === 'flashcards') textToSend = `Generate flashcards from the uploaded PDF document: ${uploadedFile.filename}`;
-          else textToSend = `Analyze the uploaded PDF: ${uploadedFile.filename}`;
+          textToSend = selectedTool === 'summarize'
+            ? `Summarize the uploaded PDF document: ${uploadedFile.filename}`
+            : selectedTool === 'quiz'
+            ? `Generate a practice quiz from the uploaded PDF document: ${uploadedFile.filename}`
+            : selectedTool === 'ner'
+            ? `Extract named entities from the uploaded PDF document: ${uploadedFile.filename}`
+            : selectedTool === 'explain'
+            ? `Explain the uploaded PDF document: ${uploadedFile.filename}`
+            : selectedTool === 'notes'
+            ? `Create study notes from the uploaded PDF document: ${uploadedFile.filename}`
+            : selectedTool === 'keywords'
+            ? `Extract important keywords from the uploaded PDF document: ${uploadedFile.filename}`
+            : selectedTool === 'flashcards'
+            ? `Create flashcards from the uploaded PDF document: ${uploadedFile.filename}`
+            : `Analyze the uploaded PDF: ${uploadedFile.filename}`;
         } else {
           textToSend = `${textToSend}\n\n[Uploaded Document Context: ${uploadedFile.filename}]`;
         }
@@ -514,8 +648,10 @@ function App() {
       setIsAsking(false);
     }
 
-    // If a study tool is selected, route directly via Study/NLP Agent
-    if (selectedTool !== 'chat') {
+    // If a study tool is selected without a PDF, route directly via Study/NLP Agent.
+    // Uploaded-PDF tasks go through Coordinator so retrieved document evidence can
+    // be passed to Verification Agent.
+    if (selectedTool !== 'chat' && !uploadedFile) {
       const toolToRun = selectedTool;
       setQuestion('');
       executeStudyAction(toolToRun, textToSend, {}, uploadedFile);
@@ -1203,7 +1339,7 @@ function App() {
                             </div>
                           )}
 
-                          {message.verification && (
+                          {shouldShowVerification(message.verification) && (
                             <div className="verification-card">
                               <div>
                                 <span>Verification</span>
@@ -1260,49 +1396,91 @@ function App() {
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('explain', message.rawContent || message.content, { level: 'Simple' }, message.uploadedFile)}
+                                onClick={() => runFollowup(
+                                  message,
+                                  'explain',
+                                  'Explain the research answer more simply',
+                                  'Explain the previous research answer more simply.',
+                                  { level: 'Simple' }
+                                )}
                               >
                                 💡 Explain simpler
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('explain', message.rawContent || message.content, { level: 'Detailed' }, message.uploadedFile)}
+                                onClick={() => runFollowup(
+                                  message,
+                                  'explain',
+                                  'Explain the research answer in more detail',
+                                  'Explain the previous research answer in more detail.',
+                                  { level: 'Detailed' }
+                                )}
                               >
                                 🔍 More detail
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('summarize', message.rawContent || message.content, { mode: 'Exam Revision' }, message.uploadedFile)}
+                                onClick={() => runFollowup(
+                                  message,
+                                  'summarize',
+                                  'Summarize the research answer for exam revision',
+                                  'Summarize the previous research answer for exam revision.',
+                                  { mode: 'Exam Revision' }
+                                )}
                               >
                                 📝 Exam summary
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('quiz', message.rawContent || message.content, { count: 5, difficulty: 'Medium' }, message.uploadedFile)}
+                                onClick={() => runFollowup(
+                                  message,
+                                  'quiz',
+                                  'Generate a quiz from the research answer',
+                                  'Generate a five-question quiz from the previous research answer.',
+                                  { count: 5, difficulty: 'Medium' }
+                                )}
                               >
                                 ❓ Generate quiz
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('flashcards', message.rawContent || message.content, {}, message.uploadedFile)}
+                                onClick={() => runFollowup(
+                                  message,
+                                  'flashcards',
+                                  'Create flashcards from the research answer',
+                                  'Create flashcards from the previous research answer.',
+                                  {}
+                                )}
                               >
                                 🗂 Flashcards
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('notes', message.rawContent || message.content, {}, message.uploadedFile)}
+                                onClick={() => runFollowup(
+                                  message,
+                                  'notes',
+                                  'Create study notes from the research answer',
+                                  'Create structured study notes from the previous research answer.',
+                                  {}
+                                )}
                               >
                                 🧠 Study notes
                               </button>
                               <button
                                 className="followup-btn"
                                 type="button"
-                                onClick={() => executeStudyAction('keywords', message.rawContent || message.content, {}, message.uploadedFile)}
+                                onClick={() => runFollowup(
+                                  message,
+                                  'keywords',
+                                  'Extract keywords from the research answer',
+                                  'Extract important keywords from the previous research answer.',
+                                  {}
+                                )}
                               >
                                 🔑 Keywords
                               </button>

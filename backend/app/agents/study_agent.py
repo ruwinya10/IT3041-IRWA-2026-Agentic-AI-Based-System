@@ -278,7 +278,10 @@ At the end, provide a short "Key points" section when appropriate.
 
     return {
         "answer": answer,
-        "extractive_summary": local_summary
+        "extractive_summary": local_summary,
+        "verification_context": {
+            "local_context": local_context
+        }
     }
 
 def extract_json(raw: str):

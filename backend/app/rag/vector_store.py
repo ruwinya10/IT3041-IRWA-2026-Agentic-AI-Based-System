@@ -156,3 +156,33 @@ def search(
         }
         for document, metadata in zip(docs, metas)
     ]
+
+# ============================================================
+# FULL DOCUMENT RETRIEVAL
+# ============================================================
+
+def get_document_chunks(user_id: int, document_id: int):
+    """
+    Retrieve all chunks for a specific document in natural reading order.
+    Bypasses fuzzy semantic search.
+    """
+    where_filter = {
+        "$and": [
+            {"user_id": user_id},
+            {"document_id": document_id},
+        ]
+    }
+    
+    result = collection.get(where=where_filter)
+    docs = result.get("documents", [])
+    ids = result.get("ids", [])
+    
+    # The IDs are generated as doc-{document_id}-{i}
+    # We sort by the index i to ensure natural reading order
+    try:
+        indexed_docs = [(int(doc_id.split('-')[-1]), doc) for doc_id, doc in zip(ids, docs)]
+        indexed_docs.sort(key=lambda x: x[0])
+        return [doc for _, doc in indexed_docs]
+    except Exception:
+        return docs
+

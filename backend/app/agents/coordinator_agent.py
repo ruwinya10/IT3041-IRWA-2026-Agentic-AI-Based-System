@@ -3,7 +3,7 @@ import re
 import httpx
 
 from typing import Literal
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
 
 from app.core.config import settings
@@ -442,23 +442,32 @@ Student question:
         return fallback_intent(question)
 
 
-async def call_agent(client, url: str, payload: dict):
+async def call_agent(
+    client,
+    url: str,
+    payload: dict,
+    headers: dict | None = None
+):
     """
     Send a request to another agent and return its JSON response.
     """
 
     response = await client.post(
-        url,
-        json=payload
+    url,
+    json=payload,
+    headers=headers
     )
 
     response.raise_for_status()
 
     return response.json()
-
+    
 
 @app.post("/ask")
-async def ask(req: AskRequest):
+async def ask(
+    req: AskRequest,
+    authorization: str = Header(...)
+):
 
     # ---------------------------------------------------------
     # STEP 1 — Determine the user's intent
@@ -511,6 +520,9 @@ async def ask(req: AskRequest):
                     {
                         "question": req.question,
                         "user_id": req.user_id
+                    },
+                    headers={
+                        "Authorization": authorization
                     }
                 )
 

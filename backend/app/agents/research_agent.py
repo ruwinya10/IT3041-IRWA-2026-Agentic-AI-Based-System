@@ -5,10 +5,11 @@ import re
 from typing import Any, Dict, List, Optional, Set
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.core.security import bearer, get_current_user_id
 from app.rag.research_context import (
     build_local_context_summary,
     search_uploaded_documents,
@@ -2051,33 +2052,14 @@ async def preview_research_queries(
 
 @app.post("/research")
 async def research(
-    req: ResearchRequest
+    req: ResearchRequest,
+    current_user_id: int = Depends(get_current_user_id),
 ):
-    """
-    Main Research Agent endpoint.
-
-    Stage 4 flow:
-
-        question
-            ↓
-        keyword extraction
-            ↓
-        topic phrase detection
-            ↓
-        multiple OpenAlex searches
-            ↓
-        duplicate removal
-            ↓
-        source/access enrichment
-            ↓
-        relevance scoring
-            ↓
-        academic ranking
-            ↓
-        trustworthy PDF/OA/source selection
-            ↓
-        ranked academic papers
-    """
+    if req.user_id != current_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not authorized to access this user's research data.",
+        )
 
     question = (
         req.question.strip()

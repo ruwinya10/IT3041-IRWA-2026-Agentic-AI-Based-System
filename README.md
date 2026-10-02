@@ -1,4 +1,7 @@
 <div align="center">
+  <img width="170" height="170" alt="image" src="https://github.com/user-attachments/assets/863e705e-3a49-4ba0-a922-a6a46a20a6f3" />
+</div>
+<div align="center">
 
   <h1>🧠 ResearchMind - AI Study & Research Assistant</h1>
 
@@ -915,7 +918,7 @@ This project was developed as an academic project for the **IT3041 – Informati
 
 <div align="center">
 
-# 🧠 ** ResearchMind - AI Study & Research Assistant**
+# 🧠 ResearchMind - AI Study & Research Assistant
 
 **Research Smarter. Learn Better. Get Evidence-Based Answers.**
 

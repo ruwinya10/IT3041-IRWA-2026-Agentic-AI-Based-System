@@ -629,10 +629,13 @@ The backend exposes FastAPI documentation through Swagger UI.
 ```text
 POST /api/auth/register
 POST /api/auth/login
-GET  /api/auth/ask/research
-POST /research
+GET /health
+GET  /api/research
 POST /api/chat/ask
-http://localhost:8000/docs
+POST /ask
+POST /api/study
+POST /api/verify
+POST api/study/process
 ```
 
 The chat endpoint receives an authenticated student's question and passes it through the multi-agent workflow.

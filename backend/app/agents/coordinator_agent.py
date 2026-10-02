@@ -238,6 +238,76 @@ def fallback_intent(question: str) -> IntentResult:
         route=["study", "verification"]
     )
 
+def get_casual_response(question: str) -> str | None:
+    """
+    Handle simple conversational messages without routing them
+    to the academic agents.
+    """
+
+    q = question.lower().strip()
+
+    greetings = [
+        "hi",
+        "hello",
+        "hey",
+        "hii",
+        "hiii",
+        "good morning",
+        "good afternoon",
+        "good evening",
+    ]
+
+    if q in greetings:
+        return (
+            "Hi! 👋 How can I help you today? "
+            "I'm specially designed for academic learning and research, "
+            "so feel free to ask me any academic question."
+        )
+
+    thanks = [
+        "thank you",
+        "thanks",
+        "thank u",
+        "thanks a lot",
+        "thank you so much",
+    ]
+
+    if q in thanks:
+        return (
+            "You're welcome! 😊 If you have any academic questions, "
+            "I'd be happy to help. I'm specially designed for academic learning and research."
+        )
+
+    emotional = [
+        "i feel sad",
+        "i am sad",
+        "i'm sad",
+        "i feel happy",
+        "i am happy",
+        "i'm happy",
+        "i feel bad",
+        "i am feeling sad",
+        "i'm feeling sad",
+        "i feel lonely",
+        "i am lonely",
+        "i'm lonely",
+        "i feel stressed",
+        "i am stressed",
+        "i'm stressed",
+        "i feel tired",
+        "i am tired",
+        "i'm tired",
+    ]
+
+    if any(phrase in q for phrase in emotional):
+        return (
+            "I understand. Take care of yourself. 😊 "
+            "I'm specially designed for academic learning and research, "
+            "so if you have an academic question or need help with your studies, "
+            "I'm here to help."
+        )
+
+    return None
 
 def classify_intent(question: str) -> IntentResult:
     """
@@ -472,7 +542,17 @@ async def ask(
     # ---------------------------------------------------------
     # STEP 1 — Determine the user's intent
     # ---------------------------------------------------------
+    casual_response = get_casual_response(req.question)
 
+    if casual_response:
+        return {
+            "answer": casual_response,
+            "sources": [],
+            "verification": None,
+            "intent": "OUT_OF_SCOPE",
+            "route": ["coordinator"]
+        }
+    
     intent_result = classify_intent(req.question)
 
     # ---------------------------------------------------------

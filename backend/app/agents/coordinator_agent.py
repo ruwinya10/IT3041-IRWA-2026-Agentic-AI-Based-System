@@ -1,25 +1,25 @@
-import json
-import re
-import httpx
+import json # Python's built-in JSON module for converting between JSON strings and Python objects
+import re  # regular expression module. It can be used for pattern matching
+import httpx  # HTTPX for making asynchronous HTTP requests to other agents
 
-from typing import Literal
-from fastapi import FastAPI, HTTPException, Header
-from pydantic import BaseModel
+from typing import Literal  # can restrict the intent field to specific allowed values
+from fastapi import FastAPI, HTTPException, Header # FastAPI for creating the API, HTTPException for returning HTTP errors, and Header for reading HTTP headers such as the Authorization token
+from pydantic import BaseModel # for defining and validating request/response data structures
 
-from app.core.config import settings
-from app.core.llm import chat
+from app.core.config import settings # Imports the application settings such as the URLs of the other agents
+from app.core.llm import chat # Imports the chat function used to send prompts to the LLM
 
-app = FastAPI(title="Coordinator Agent")
+app = FastAPI(title="Coordinator Agent") # Creates the FastAPI application and gives it the name "Coordinator Agent".
 
 
-class AskRequest(BaseModel):
+class AskRequest(BaseModel): # Defines the structure of a request sent to the Coordinator's /ask endpoint
     question: str
     user_id: int
 
 
-class IntentResult(BaseModel):
-    academic: bool
-    intent: Literal[
+class IntentResult(BaseModel): # Defines the structure of the result returned by the intent classifier
+    academic: bool # Indicates whether the question is considered academic/in-scope
+    intent: Literal[  # Restricts the intent to one of the predefined intent categories
         "GENERAL_LEARNING",
         "GENERAL_KNOWLEDGE",
         "EXPLANATION",
@@ -30,34 +30,34 @@ class IntentResult(BaseModel):
         "RESEARCH_ANALYSIS",
         "OUT_OF_SCOPE"
     ]
-    route: list[str]
+    route: list[str] # Stores the list of agents that should receive the request
 
 
-@app.get("/health")
+@app.get("/health") # Defines a GET endpoint used to check whether the Coordinator Agent is running.
 def health():
     return {"agent": "coordinator", "status": "ok"}
 
 
-def parse_intent(raw: str) -> IntentResult:
+def parse_intent(raw: str) -> IntentResult:  # Defines a function that converts the raw LLM response into an IntentResult object
     """
     Extract the JSON object returned by the LLM
     and validate it using Pydantic.
     """
 
-    start = raw.find("{")
-    end = raw.rfind("}")
+    start = raw.find("{") # Finds the position of the first opening curly bracket in the LLM response.
+    end = raw.rfind("}")  # Finds the position of the last closing curly bracket in the LLM response.
 
-    if start == -1 or end == -1 or end <= start:
+    if start == -1 or end == -1 or end <= start:  # Checks whether a valid JSON object could be found in the response.
         raise ValueError("Coordinator did not return valid JSON.")
 
-    json_text = raw[start:end + 1]
+    json_text = raw[start:end + 1]  # Extracts only the JSON portion from the LLM response.
 
-    data = json.loads(json_text)
+    data = json.loads(json_text) # Converts the JSON string into a Python dictionary.
 
-    return IntentResult.model_validate(data)
+    return IntentResult.model_validate(data)  # # Validates the dictionary against the IntentResult Pydantic model
 
 
-def looks_like_general_knowledge(question: str) -> bool:
+def looks_like_general_knowledge(question: str) -> bool:  # Defines a function that checks whether a question looks like general knowledge.
     """
     Conservative check for student-style factual questions
     such as capitals, geography, and well-known facts.
@@ -112,7 +112,7 @@ def looks_like_general_knowledge(question: str) -> bool:
     return any(phrase in q for phrase in gk_phrases)
 
 
-def fallback_intent(question: str) -> IntentResult:
+def fallback_intent(question: str) -> IntentResult:  # Defines a fallback classifier used when the LLM classifier fails.
     """
     Safety fallback if the LLM intent classifier fails.
 
@@ -123,7 +123,7 @@ def fallback_intent(question: str) -> IntentResult:
 
     q = question.lower()
 
-    # Uploaded document / PDF related requests
+    # Uploaded document / PDF related requests. Defines keywords associated with uploaded documents.
     document_words = [
         "uploaded file",
         "uploaded document",
@@ -244,7 +244,7 @@ def get_casual_response(question: str) -> str | None:
     to the academic agents.
     """
 
-    q = question.lower().strip()
+    q = question.lower().strip() # strip() removes spaces from both ends.
 
     greetings = [
         "hi",
@@ -309,7 +309,7 @@ def get_casual_response(question: str) -> str | None:
 
     return None
 
-def classify_intent(question: str) -> IntentResult:
+def classify_intent(question: str) -> IntentResult:  # Defines the main LLM-based intent classification function.
     """
     Ask the LLM to determine the user's academic intent.
     """
@@ -339,7 +339,7 @@ def classify_intent(question: str) -> IntentResult:
         "overview"
     ]
 
-    if any(word in q for word in summary_words) and not any(
+    if any(word in q for word in summary_words) and not any(  # Checks whether the user wants a summary but is not asking for external research.
         word in q for word in ["research paper", "research papers", "find papers", "external research"]
     ):
         return IntentResult(
@@ -355,7 +355,8 @@ def classify_intent(question: str) -> IntentResult:
             route=["study", "verification"]
         )
 
-    prompt = f"""
+    # Creates the prompt that will be sent to the LLM for intent classification.
+    prompt = f"""  
 You are the intent-classification component of an AI Study and Research Assistant.
 
 Classify the student's question into exactly ONE intent.
@@ -483,10 +484,10 @@ Student question:
         raw = chat(
             "You are the Coordinator Agent responsible for routing student requests.",
             prompt,
-            temperature=0
+            temperature=0  # Controls how much randomness the LLM uses when generating its response
         )
 
-        result = parse_intent(raw)
+        result = parse_intent(raw)  # Extracts and validates the JSON returned by the LLM.
 
         academic_only_intents = {
             "SUMMARIZATION",
@@ -509,34 +510,34 @@ Student question:
         return result
 
     except Exception:
-        return fallback_intent(question)
+        return fallback_intent(question)  # If the LLM classification fails for any reason, use the fallback classifier.
 
 
-async def call_agent(
-    client,
-    url: str,
-    payload: dict,
-    headers: dict | None = None
+async def call_agent(  # Defines an asynchronous helper function for communicating with other agents.
+    client,  # Receives the HTTPX client used for communication
+    url: str,  # Receives the URL of the target agent endpoint
+    payload: dict,  # Receives the JSON payload that should be sent
+    headers: dict | None = None  # Receives optional HTTP headers such as the Authorization token.
 ):
     """
     Send a request to another agent and return its JSON response.
     """
 
-    response = await client.post(
+    response = await client.post( # Sends an asynchronous POST request to the target agent
     url,
     json=payload,
     headers=headers
     )
 
-    response.raise_for_status()
+    response.raise_for_status() # Raises an exception if the other agent returned an HTTP error.
 
-    return response.json()
+    return response.json()  # Converts the response JSON into a Python dictionary/object and returns it.
     
 
-@app.post("/ask")
-async def ask(
-    req: AskRequest,
-    authorization: str = Header(...)
+@app.post("/ask")  # Defines the POST endpoint used by the frontend/backend to submit a question.
+async def ask(  # Defines the asynchronous function that handles incoming questions.
+    req: AskRequest,  # Receives and validates the request body using AskRequest
+    authorization: str = Header(...) # Reads the Authorization header from the incoming request.
 ):
 
     # ---------------------------------------------------------
@@ -579,7 +580,7 @@ async def ask(
             "route": ["coordinator"]
         }
 
-    async with httpx.AsyncClient(timeout=90) as client:
+    async with httpx.AsyncClient(timeout=90) as client:  # Creates an asynchronous HTTP client for communicating with the other agents.
 
         try:
 
@@ -588,15 +589,15 @@ async def ask(
             # -------------------------------------------------
 
             research = {
-                "papers": [],
-                "local_context": []
+                "papers": [],   # Stores research papers returned by the Research Agent.
+                "local_context": []  # Stores additional local context if available.
             }
 
-            if "research" in intent_result.route:
+            if "research" in intent_result.route:  # Checks whether the selected route contains the Research Agent.
 
-                research = await call_agent(
+                research = await call_agent(  # Sends the question to the Research Agent.
                     client,
-                    f"{settings.research_agent_url}/research",
+                    f"{settings.research_agent_url}/research",  # Builds the Research Agent's research endpoint URL.
                     {
                         "question": req.question,
                         "user_id": req.user_id
@@ -632,12 +633,12 @@ async def ask(
             verification = None
 
             if "verification" in intent_result.route:
-                verification_research = {
-                    **research,
-                    **(study.get("verification_context") or {})
+                verification_research = {  # Combines research information with verification context returned by the Study Agent.
+                    **research,  # Copies all existing research fields.
+                    **(study.get("verification_context") or {})  # Adds verification context from the Study Agent.
                 }
 
-                verification = await call_agent(
+                verification = await call_agent(  # Sends the answer and supporting information to the Verification Agent
                     client,
                     f"{settings.verification_agent_url}/verify",
                     {
@@ -650,18 +651,18 @@ async def ask(
             # -------------------------------------------------
             # STEP 6 — Return final result
             # -------------------------------------------------
-
+            # Returns the final combined response to the caller.
             return {
                 "answer": study["answer"] if study else "",
                 "sources": research.get("papers", []),
                 "verification": verification,
                 "intent": intent_result.intent,
-                "route": ["coordinator"] + intent_result.route
+                "route": ["coordinator"] + intent_result.route  # Shows the complete route beginning with the Coordinator.
             }
 
-        except httpx.HTTPError as exc:
+        except httpx.HTTPError as exc: # Handles HTTP communication errors between the Coordinator and other agents.
 
-            raise HTTPException(
+            raise HTTPException(  # Converts the internal communication error into an HTTP 502 response.
                 status_code=502,
                 detail=f"Agent communication failed: {exc}"
             ) from exc
